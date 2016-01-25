@@ -80,9 +80,12 @@ def main(grammar, config):
 
     input_new = parse_input.algorithm_info(P,T)
     
-    logging.info(input_new.language)    
+    #logging.info(input_new.language)    
+    logging.info("Number of Designs:")
     logging.info(len(input_new.language))
 
-    my_beluga = beluga_obj.beluga_obj(input_new.language)
+    my_beluga = beluga_obj.beluga_obj(input_new.language,input_new.design_objective)
+    logging.info("Design Space:")
+    logging.info(my_beluga.design_space)
 #    my_beluga.search(...)
 
