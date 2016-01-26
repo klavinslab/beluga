@@ -1,6 +1,8 @@
 import numpy as np
 from sympy import *
+from scipy.integrate import odeint
 
+sub_model = []
 #output: sums the entries in the cols of a matrix, for each row
 def sum_cols(mat):
     
@@ -122,6 +124,13 @@ class design:
 
 	    return (model,params)
 
+	def testDesign(self, cur_param_sp, ground_truth_vals):
+		param_sp = cur_param_sp
+		return param_sp
+    	#simulate with ground_truth_vals and then
+    	#do param inference on self design using it's cur_param_sp and using char_data from sim
+    	#and update the cur_param_sp
+
 
 def getSuccessors(des,design_list):
 	successors = []
@@ -149,6 +158,13 @@ def getSuccessors(des,design_list):
 
 	return successors
 
+def odeint_model(x_vec,t):
+	global sub_model
+	G0, G1, G2 = symbols("G0, G1, G2")
+	temp_g0, temp_g1, temp_g2 = x_vec
+	new_values = list(sub_model.subs({G0: temp_g0, G1: temp_g1, G2: temp_g2}))
+	return new_values
+
 class beluga_obj:
     """
     A class to setup and run the beluga algorithm.
@@ -164,11 +180,14 @@ class beluga_obj:
     	self.Ls = []
     	self.Ks = []
     	self.Gs = []
+    	self.param_space = {}
     	self.design_space = self.genGraph(language)
+    	
     	
 
     def genGraph(self, language):
     	design_list = []
+    	global sub_model
     	for elem in language:
     		design_list.append(design(elem))
 
@@ -183,6 +202,24 @@ class beluga_obj:
 
     		#Generating ODE model and params:
     		des.getModel(self.species, self.promoters, self.Ls, self.Ks, self.Gs)
+    		
+    		####### TESTING ODE SIMULATION WITH SCIPY ODEINT ######
+    		#######         THIS WILL NOT STAY HERE          ######
+    		sub_model = des.model.subs(self.testdata)
+    		#print "submodel: ", sub_model
+
+    		init_species = [1,1,1]
+    		t_out = np.arange(0,24,1)
+    		sim_out = odeint(odeint_model,init_species,t_out)
+    		#print "SIMULATION of design ", des, ":"
+    		g0_res, g1_res, g2_res = sim_out.T
+    		#print g0_res
+    		des.char_data = g0_res
+
+
+
+    		for x in des.params:
+    			self.param_space.update({x: [0,10]})
 
     		#Finding successors:
     		successors = getSuccessors(des,design_list)
@@ -193,13 +230,89 @@ class beluga_obj:
     			if des not in item.successors:
     				item.successors.append(des)
 
-
     	for thing in design_list:
     		print thing.id, " params = \n"
     		print thing.params
 
-
+    	print "Param space: ", self.param_space
     	return design_list
 
-    def search():
-        return 0
+    def getDesignError(des_node, goal_beh):
+    	#simulate the cur_des using it's des_node[0].model and using des_node[1] knowledge
+    	#and determine the probability that it generated the goal behavior?  
+    	return 1
+
+    def getStartState(self):
+    	start_des = self.design_space[0]
+    	start_knowledge = self.param_space
+    	return (start_des,start_knowledge)
+
+    def isGoalState(self, des_node):
+    	#90% of all params narrowed down? (we could eliminate params who are tied to known 0 params)
+    	#So if 10% unknown
+    	#OR
+    	#design with 10% error
+    	isgoal = False
+    	
+    	cur_des = des_node[0]
+    	cur_param_know = des_node[1]
+    	param_range_sum = 0
+    	total_unknown_sum = 0
+
+    	#Do parameter inference for this design and update its cur_param_know
+    	cur_param_know = cur_des.testDesign(cur_param_know,self.testdata)
+
+    	for key in cur_param_know:
+    		param_range_sum += cur_param_know[key][1] - cur_param_know[key][0]
+    		total_unknown_sum += 10
+
+    	perc_unknown = param_range_sum / total_unknown_sum
+
+    	if self.getDesignError(des_node,self.goal) < 0.10:
+    		print "We found a design that works!"
+    		return True
+
+    	if perc_unknown < 0.10:
+    		print "We know enough to say no such design exists in this space."
+    		return True
+
+    	return False
+
+    def getSearchSuccessors(self, node):
+    	#returns successor states, actions they require, and a cost of 1
+    	#returns all successor designs in node[0].successors and appends the current knowledge state to it and cost
+    	return 0
+
+    def heuristic(self, des_node):
+    	#distance is just how far we are from knowing all params (reducing uncertainy)
+    	return 0
+
+    def search(self):
+	    fringe = util.PriorityQueue()
+	    start_state = self.getStartState()
+	    fringe.push([start_state],heuristic(start_state))
+	    
+	    visited = []
+	    
+	    while fringe.isEmpty()==0:
+	        path = fringe.pop()
+	        node = path[-1]
+	        if node != start_state:
+	            node = node[0]
+	        
+	        visited.append(node)
+	        
+	        if self.isGoalState(node):
+	            actions = getPathActions(path, problem)
+	            return actions
+
+	        for i in self.getSearchSuccessors(node):
+	            if(i[0] not in visited):
+	                new_path = list(path)
+	                new_path.append(i)
+	                
+	                actions = getPathActions(new_path,problem)
+	                fringe.push(new_path,problem.getCostOfActions(actions)+heuristic(node,problem))
+	                
+	    print "somehow fringe is empty?"
+	    return 0

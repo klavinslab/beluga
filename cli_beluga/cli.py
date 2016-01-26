@@ -87,5 +87,5 @@ def main(grammar, config):
     my_beluga = beluga_obj.beluga_obj(input_new.language,input_new.design_objective)
     logging.info("Design Space:")
     logging.info(my_beluga.design_space)
-#    my_beluga.search(...)
+    my_beluga.search()
 
