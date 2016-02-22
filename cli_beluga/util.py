@@ -160,6 +160,10 @@ class Queue:
         for element in self.list:
             print element
 
+    def printMDPQ(self):
+        for element in self.list:
+            print element[0], element[1].symb_param
+
 class PriorityQueue:
     """
       Implements a priority queue data structure. Each inserted item

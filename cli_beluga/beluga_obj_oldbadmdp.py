@@ -8,14 +8,6 @@ from scipy.integrate import odeint
 sub_model = []
 project_path = "/Users/Leli/beluga_cli_test_dir/ABCSMC"
 
-
-def is_sublist(a,b):
-	if a == []:
-		return True
-	if b == []:
-		return False
-	return b[:len(a)] == a or is_sublist(a,b[1:])
-
 def printMDPQueue(mdpQ):
 	if mdpQ.isEmpty() != 1:
 		for element in mdpQ:
@@ -223,30 +215,24 @@ class design:
 		test_des_id = desb.id
 		cur_des_idx = 0
 
-		# a = self.params
-		# b = desb.params
-		# if a == []:
-		# 	return True
-		# if b == []:
-		# 	return False
-		# return b[:len(a)] == a or a.isSubDesign(b[1:])
+		#print "DESIGNS: ", cur_des_id, test_des_id
 
-		# for i in range(len(test_des_id)):
-		# 	#print "i = ", i
-		# 	if test_des_id[i] == cur_des_id[cur_des_idx]:
-		# 		#print "elements equal: ", test_des_id[i], cur_des_id[cur_des_idx]
-		# 		cur_des_idx+=1
-		# 	else:
-		# 		cur_des_idx = 0
-		# 		if test_des_id[i] == cur_des_id[cur_des_idx]:
-		# 			#print "elements equal: ", test_des_id[i], cur_des_id[cur_des_idx]
-		# 			cur_des_idx+=1
-		# if cur_des_idx == len(cur_des_id):
-		# 	result = True
-		# else:
-		# 	result = False
+		for i in range(len(test_des_id)):
+			#print "i = ", i
+			if test_des_id[i] == cur_des_id[cur_des_idx]:
+				#print "elements equal: ", test_des_id[i], cur_des_id[cur_des_idx]
+				cur_des_idx+=1
+			else:
+				cur_des_idx = 0
+				if test_des_id[i] == cur_des_id[cur_des_idx]:
+					#print "elements equal: ", test_des_id[i], cur_des_id[cur_des_idx]
+					cur_des_idx+=1
+		if cur_des_idx == len(cur_des_id):
+			result = True
+		else:
+			result = False
 
-		# return result
+		return result
 
 	def isSimilar(self, desb):
 		result = False
@@ -284,24 +270,18 @@ class design:
 	    	#print gene, " in ", self.id, " = ", (gene in self.id), " at ", self.id.index(gene)
 	    	if gene in self.id:
 	    		#print "GENE is, ", gene
-	    		indices = [d for d, x in enumerate(self.id) if x == gene]
-	    		print indices
-	    		for index in indices:
-		    		#rel_prom_idx = self.id.index(gene) - 1
-		    		rel_prom_idx = index - 1
-		    		prom = self.id[rel_prom_idx]
-		    		prom_idx = promoters.index(prom)
-		    		gene_idx = species.index(gene)
-		    		mat[gene_idx][prom_idx] = 1
+	    		rel_prom_idx = self.id.index(gene) - 1
+	    		prom = self.id[rel_prom_idx]
+	    		prom_idx = promoters.index(prom)
+	    		gene_idx = species.index(gene)
+	    		mat[gene_idx][prom_idx] = 1
 
-	    print "matrix for ", self.id, " = ", mat
+	    #print "matrix for ", self.id, " = ", mat
 	    sum_mat = sum_cols(mat)
 
 	    for n in species:
 	    	odes.append(0)
-	    #### FIX ME ####
-	    ### Look at design 193 ... 
-
+	    
 	    #GENERATE GENERIC ODE MODEL FROM DESIGN MATRIX
 	    for a in range(0, len(species)):
 	        for j in range(0, len(promoters)):
@@ -311,7 +291,6 @@ class design:
 	                        odes[a]+= (Ls[j][i]) / (1+Gs[0][i]*Ks[i][j])
 	                        Lparam_exists = Ls[j][i] in params
 	                        Kparam_exists = Ks[i][j] in params
-	                        #print Ls[j][i], Ks[i][j], " -> ", Lparam_exists, Kparam_exists
 	                        if Lparam_exists == False:
 	                            params.append(Ls[j][i])
 	                        if Kparam_exists == False:
@@ -320,7 +299,7 @@ class design:
 	        odes[a]+=-Gs[0][a]
 	 
 	    model = Matrix([odes[0]]+[odes[1]]+[odes[2]])
-	    print params
+
 
 	    # global global_params2
 	    # for x in params:
@@ -366,63 +345,27 @@ class design:
 def getSuccessors(des,design_dict):
 	successors = []
 	sub_des_list = []
-	exp_des_list = []
-	#suc_exp = []
-	new_successors = []
 
-	#Find the build successors
+	#Find all designs that des is a subdesign of
+	for key, subdes in design_dict.iteritems():
+		if des.isSubDesign(subdes):
+			if des.id != subdes.id:
+				sub_des_list.append((subdes,len(subdes.id)))
 
-	for key, nxtdes in design_dict.iteritems():
-		if is_sublist(des.params,nxtdes.params) and (des.id != nxtdes.id):
-			sub_des_list.append((nxtdes, len(nxtdes.params)))
-		
+	#Finding successors: choose min subdes's
+	#MAY CHANGE THIS TO ACCEPT ANY DESIGN WHICH IS A SUPERSET OF THIS DES AND NOT JUST THE NEXT CLOSEST ONE
 	if len(sub_des_list) > 0:
-		min_param_len = min(sub_des_list,key=lambda item:item[1])[1]
+		min_des_len = min(sub_des_list,key=lambda item:item[1])[1]
 	for item in sub_des_list:
-		if item[1] == min_param_len:
+		if item[1] == min_des_len:
 			successors.append(str(item[0].id))
-		
-	if len(successors) > 0:
-		min_des_len = len(min(successors,key=lambda item:len(item)))
-		for thing in successors:
-			if len(thing) == min_des_len:
-				new_successors.append(thing)
 
+	#Now find all designs that differ only by one element from des
+	for key, otherdes in design_dict.iteritems():
+		if des!=otherdes and des.isSimilar(otherdes) and (str(otherdes.id) not in successors):
+			successors.append(str(otherdes.id))
 
-
-	#Find the explore successors
-	for key2, nxtdes2 in design_dict.iteritems():
-		if len(set(des.params).intersection(set(nxtdes2.params))) == 0:
-			exp_des_list.append((nxtdes2, len(nxtdes2.params)))
-	if len(exp_des_list) > 0:
-		min_exp_len = min(exp_des_list,key=lambda item:item[1])[1]
-	for item in exp_des_list:
-		if item[1] == min_exp_len:
-			new_successors.append(str(item[0].id))
-
-
-
-	# #Find all designs that des is a subdesign of
-	# for key, subdes in design_dict.iteritems():
-	# 	if des.isSubDesign(subdes):
-	# 		if des.id != subdes.id:
-	# 			sub_des_list.append((subdes,len(subdes.id)))
-
-
-	# #Finding successors: choose min subdes's
-	# #MAY CHANGE THIS TO ACCEPT ANY DESIGN WHICH IS A SUPERSET OF THIS DES AND NOT JUST THE NEXT CLOSEST ONE
-	# if len(sub_des_list) > 0:
-	# 	min_des_len = min(sub_des_list,key=lambda item:item[1])[1]
-	# for item in sub_des_list:
-	# 	if item[1] == min_des_len:
-	# 		successors.append(str(item[0].id))
-
-	# #Now find all designs that differ only by one element from des
-	# for key, otherdes in design_dict.iteritems():
-	# 	if des!=otherdes and des.isSimilar(otherdes) and (str(otherdes.id) not in successors):
-	# 		successors.append(str(otherdes.id))
-
-	return new_successors
+	return successors
 
 class MDP_node:
 	"""
@@ -434,81 +377,12 @@ class MDP_node:
 		self.symb_param = {} #self.getSymbParams(design_space)
 		self.actions = {} #self.getActions(design_space)
 		self.successors = []
-		self.percent_unknown = 1
-		self.history = []
 
 	def getSymbParams(self, design_space):
 		return []
 
-	def getPossibleActions(self, design_dict):
-		known_params = []
-		possible_actions = {}
-
-		if self.percent_unknown < 0.6:
-			return {}
-
-		#gets a list of the known params only
-		cur_known = self.symb_param
-		for key, item in cur_known.iteritems():
-			if item == 0:
-				known_params.append(key)
-
-		known_set = set(known_params)
-
-		#find build actions
-		successors = []
-		sub_des_list = []
-		exp_des_list = []
-		#suc_exp = []
-		actions = {}
-
-		#Find the build successors
-		for key, nxtdes in design_dict.iteritems():
-			#Should this check the full history??? Or just the last action that got us here?
-			if known_set.issubset(set(nxtdes.params)) and (str(nxtdes.id) not in self.history):
-				#print known_set , "is a subset of ", set(nxtdes.params), "i.e design ", nxtdes.id
-				sub_des_list.append((nxtdes, len(nxtdes.params)))
-			# if is_sublist(known_params,nxtdes.params) and (nxtdes.id not in self.history):
-			# 	sub_des_list.append((nxtdes, len(nxtdes.params)))
-		
-		###FIX ME###
-		#change this to a percentage knowledge thing
-		#instead of just the minimum design that is a superset of the set of known params 
-		#say the successors are the set of designs in which we know at least 60% of the params
-		#given our current knowledge ... and then this percentage can be tuned later to vary
-		#simulation time vs number of experiments
-
-		if len(sub_des_list) > 0:
-			min_param_len = min(sub_des_list,key=lambda item:item[1])[1]
-		for item in sub_des_list:
-			if item[1] == min_param_len:
-				successors.append(str(item[0].id))
-			
-		if len(successors) > 0:
-			min_des_len = len(min(successors,key=lambda item:len(item)))
-			for thing in successors:
-				if len(thing) == min_des_len:
-					actions.update({thing: []})
-
-		#find explore actions
-		for key2, nxtdes2 in design_dict.iteritems():
-			if len(known_set.intersection(set(nxtdes2.params))) == 0:
-				exp_des_list.append((nxtdes2, len(nxtdes2.params)))
-		if len(exp_des_list) > 0:
-			min_exp_len = min(exp_des_list,key=lambda item:item[1])[1]
-		for item in exp_des_list:
-			if item[1] == min_exp_len:
-				actions.update({str(item[0].id): []})
-
-
-
-		print "actions for state ", self. symb_param, " = ", actions
-
-		return actions
-
-	def getRewards(self, design_dict):
-		return 0
-	
+	def getActions(self, design_space):
+		return []
 
 class beluga_obj:
     """
@@ -528,7 +402,7 @@ class beluga_obj:
     	self.param_space = {}
     	self.design_space = self.genGraph(language)
     	self.belugaMDP = self.initMDP()
-    	#self.policy = self.initPolicy()
+    	self.policy = self.initPolicy()
     	
     	
 
@@ -580,13 +454,11 @@ class beluga_obj:
     		for x in des.params:
     			self.param_space.update({x: [0,10]})
 
-
-    	for key1, des1 in design_dict.iteritems():
     		#Finding successors:
-    		successors = getSuccessors(des1,design_dict)
+    		successors = getSuccessors(des,design_dict)
     		for item in successors:
-    			if item not in des1.successors:
-    				des1.successors.append(item)
+    			if item not in des.successors:
+    				des.successors.append(item)
     			#updating the successor graph edges in the other direction
     			# if des.id not in design_dict[item].successors:
     			# 	design_dict[item].successors.append(des.id)
@@ -594,25 +466,13 @@ class beluga_obj:
     	for key, thing in design_dict.iteritems():
     		print " key = ", key, type(key)
     		print "\n id = ", thing.id, type(thing.id)
-    		print "\n model = ", thing.model
     		print "\n params = ", thing.params
     		print "\n successors = ", thing.successors
     		print "-----------------------------------\n\n"
 
     	print "Num Designs in Space = ", len(design_dict)
     	print "Param space: ", self.param_space
-    	#print "len of intersection of [p0,g0] and [p0,g1,p0,g0] params: ", len(set(design_dict["['p0', 'g0']"].params).intersection(set(design_dict["['p1', 'g0']"].params)))
-    	
     	return design_dict
-
-    def getTransitionsandProb(self,state,action):
-    	"""
-        Returns list of (nextState, prob) pairs
-        representing the states reachable
-        from 'state' by taking 'action' along
-        with their transition probabilities.
-        """
-    	return 0
 
     def initMDP(self):
     	#an MDP state has associated with it:
@@ -629,109 +489,87 @@ class beluga_obj:
     		start_node.symb_param.update({p_key: 1})
     	print "Start node symb params = ", start_node.symb_param
     	start_node.actions = {"['p0', 'g0']": [], "['p1', 'g0']": [], "['p2', 'g0']": []}
-    	start_node.history.append("None")
     	start_element = ("S"+str(s_key), start_node)
     	mdp_Q.push(start_element)
-
-    	#WHAT TO DO:
-    	#figure out all the states in the MDP 
-    		#for each state call getTransitionsandProb to determine successors
-    		#just basically do what i was doing before but the successors will be different
-    		#should probably just redo building of the inital design space state graph
-    		#basically the getsuccessors needs to look at params NOT parts! But otherwise it's the same.
-
+    	#mdp_dict.update({"S"+str(s_key): start_node})
+    	#only update to mdp_dict when state is popped from mdp_Q
+    	#for key, mdpnode in mdp_dict.iteritems():
     	while mdp_Q.isEmpty()==0:
+    		print "Q at start of while: "
+    		#mdp_Q.printMDPQ()
     		mdpelement = mdp_Q.pop()
     		key, mdpnode = mdpelement[0], mdpelement[1]
     		mdp_dict.update({key: mdpnode})
-    		print "\n\nMDP NODE = ", key
-    		print "actions before = ", mdpnode.actions
+    		print "MDP NODE = ", key
+    		#print "Symbparam for state S",str(key), " = ", mdpnode.symb_param
     		
-    		param_sum = 0
-    		
-    		for v1_key, val1 in mdpnode.symb_param.iteritems():
-    			param_sum += val1
-    		perct_unk = float(float(param_sum)/float(len(mdpnode.symb_param)))
-    		print "Percent unknown = ", perct_unk
+    		for action, s_prime in mdpnode.actions.iteritems():
+    			#determine how many s_prime result states you get from this action
+    				#gotta figure this part out
+    				#print key, " action = ", action
+    				a_des_params = self.design_space[action].params
+    				exp_des_params = []
 
-    		actions = mdpnode.getPossibleActions(self.design_space)
+    				num_s_primes = 0
+    				for param in a_des_params:
+    					#print param
+    					#print mdpnode.symb_param[param]
+    					if mdpnode.symb_param[param] == 1:
+    						num_s_primes += 1
+    						exp_des_params.append(param)
+    				num_s_primes = 2**num_s_primes
+    				#print "Number of possible result states for action ", action, " = ", num_s_primes
+    				#num_s_primes is the number of result states
+    				#exp_des_params should hold the array of param symbols of which we'll expand
+    				#we need to now expand
+    				new_states_list = []
+    				for i in range(num_s_primes-1):
+    					s_key += 1
+    					new_symb_param = dict(mdpnode.symb_param)
+    					#take the binary representation of i
+    					#for the length of exp_des_params
+    					for exp_p in exp_des_params:
+    						new_symb_param[exp_p] = (i >> exp_des_params.index(exp_p)) & 1
 
-    		for action, val in actions.iteritems():
-    			new_mdpnode = MDP_node(action, self.design_space)
-    			new_mdpnode.history = list(mdpnode.history)
-    			new_mdpnode.history.append(action)
+    					#new_symb_param should have the symb_param of 1 new state
+    					new_mdpnode = MDP_node(action, self.design_space)
+    					new_mdpnode.symb_param = new_symb_param
+    					#print "Symbparam for state S",str(s_key), " = ", new_mdpnode.symb_param
+    					### FIX ME ###
+    					#At this point the symb_param for the new node is correct. 
+    					#But when we take the node off the Q later ... it takes the orignal value of symb_param
+    					#create the actions for this new mdpnode
+    					#first check if it's a terminal node (i.e most params have been learned)
+    					sym_param_sum = 0
+    					for v_key, val in new_mdpnode.symb_param.iteritems():
+    						sym_param_sum += val
+    					perct_unknown = float(float(sym_param_sum)/float(len(new_symb_param)))
+    					#print "Percent unknown in state S",str(s_key), " with action ", action, " = ", perct_unknown
+    					if perct_unknown >= 0.3 :
+	    					for succ in self.design_space[action].successors:
+	    						new_mdpnode.actions.update({succ: []})
+    					#go back and update the sPrime state for this action in the parent mdpnode
+    					mdpnode.actions[action].append("S"+str(s_key))
+    					new_element = ("S"+str(s_key), new_mdpnode)
+    					new_states_list.append(new_element)
+    					#print "Appending ", new_element[0], new_element[1].symb_param
+    					mdp_Q.push(new_element)
+    					# print "Q at end of while: "
+    					# mdp_Q.printMDPQ()
 
-    			a_des_params = self.design_space[action].params
-    			s_key += 1
-    			new_symb_param = dict(mdpnode.symb_param)
-    			for param in a_des_params:
-    				new_symb_param[param] = 0
-    			new_mdpnode.symb_param = new_symb_param
-
-    			sym_param_sum = 0
-    			for v_key, val in new_mdpnode.symb_param.iteritems():
-    				sym_param_sum += val
-    			perct_unknown = float(float(sym_param_sum)/float(len(new_symb_param)))
-    			new_mdpnode.percent_unknown = perct_unknown
-
-    			###FIX ME###
-    			#This way of getting prob doesn't seem right
-    			prob = 1 - (perct_unk-perct_unknown)
-    			
-    			actions[action].append(("S"+str(s_key),prob))
-    			actions[action].append((key,1-prob))
-    			mdpnode.actions = dict(actions)
-    			new_element = ("S"+str(s_key), new_mdpnode)
-    			print "PUSHING ELEMENT", new_element[0], "TO QUEUE"
-    			mdp_Q.push(new_element)
-
-
-    	# 	if perct_unk >= 0.6 :
-    	# 		#getLegalActions here ... by basically doing what getSuccessors does for design_dict
-    	# 		#except instead of the thing it's looking at being the current design and it's successors 
-    	# 		#it's the current state of knowledge and it's possible actions
-    	# 		#this is used for everything mdp node except the start node
-    	# 		mdpnode.getPossibleActions(self.design_space)
-
-    	# 		for action, s_prime in mdpnode.actions.iteritems():
-					# a_des_params = self.design_space[action].params
-					# exp_des_params = []
-					# s_key += 1
-					# new_symb_param = dict(mdpnode.symb_param)
-
-					# for param in a_des_params:
-					# 	new_symb_param[param] = 0
-
-					# new_mdpnode = MDP_node(action, self.design_space)
-					# new_mdpnode.symb_param = new_symb_param
-
-					# new_mdpnode.history = list(mdpnode.history)
-					# new_mdpnode.history.append(action)
-
-					# sym_param_sum = 0
-					# for v_key, val in new_mdpnode.symb_param.iteritems():
-					# 	sym_param_sum += val
-					# perct_unknown = float(float(sym_param_sum)/float(len(new_symb_param)))
-
-					# if perct_unknown >= 0.6 :
-					# 	for succ in self.design_space[action].successors:
-					# 		if succ not in new_mdpnode.history:
-					# 			new_mdpnode.actions.update({succ: []})
-					# else:
-					# 	new_mdpnode.actions = {}
-					# prob = 0.9
-
-					# mdpnode.actions[action].append(("S"+str(s_key),prob))
-					# mdpnode.actions[action].append((key,1-prob))
-					# new_element = ("S"+str(s_key), new_mdpnode)
-					# print "PUSHING ELEMENT", new_element[0], "TO QUEUE"
-					# mdp_Q.push(new_element)
-
+    				#print "Q after 1 action expansion: "
+    				#mdp_Q.printMDPQ()
     					
-    		print "actions after = ", mdpnode.actions
-    		print "symb params = ", mdpnode.symb_param
-    		print "history after = ", mdpnode.history
+    		# print "actions = ", mdpnode.actions
+    		# print "symb params = ", mdpnode.symb_param
 
+    			#for each s_prime result state
+    			#increment s_key
+    			#create a new MDP_node for each s_prime
+    			#append the current s_prime result state s_key to the parent mdpnode's 
+    			#result state array - associated with this action
+    			## HOPEFULLY THIS TERMINATES :/ ##
+    			## DONT THINK IT DOES ##
     	print "Num MDP states = ", len(mdp_dict)
 
     	return mdp_dict
