@@ -64,17 +64,25 @@ def main(grammar, config):
     ('<article>',       ['the']),                      \
     ('<verb>',          ['bit'])                       ]
 
+    # P = [ ('Design',           ['R']),                  \
+    # ('Design',          ['C','R']),                      \
+    # ('Design',          ['C','C','R']),                  \
+    # ('C',               ['Prom', 'Gene']),              \
+    # ('R',               ['Prom', 'g0']),                \
+    # ('Prom',            ['p0']),                        \
+    # ('Prom',            ['p1']),                        \
+    # ('Prom',            ['p2']),                        \
+    # ('Gene',            ['g1']),                        \
+    # ('Gene',            ['g2'])                         ]
+
+
     P = [ ('Design',           ['R']),                  \
     ('Design',          ['C','R']),                      \
-    ('Design',          ['C','C','R']),                  \
     ('C',               ['Prom', 'Gene']),              \
     ('R',               ['Prom', 'g0']),                \
     ('Prom',            ['p0']),                        \
     ('Prom',            ['p1']),                        \
-    ('Prom',            ['p2']),                        \
-    ('Gene',            ['g1']),                        \
-    ('Gene',            ['g2'])                         ]
-
+    ('Gene',            ['g1'])                         ]
 
 
 

@@ -319,7 +319,9 @@ class design:
 
 	        odes[a]+=-Gs[0][a]
 	 
-	    model = Matrix([odes[0]]+[odes[1]]+[odes[2]])
+	    #model = Matrix([odes[0]]+[odes[1]]+[odes[2]])
+	    model = Matrix([odes[0]]+[odes[1]])
+	    
 	    print params
 
 	    # global global_params2
@@ -436,6 +438,8 @@ class MDP_node:
 		self.successors = []
 		self.percent_unknown = 1
 		self.history = []
+		self.policy = []
+		self.vVal = 0
 
 	def getSymbParams(self, design_space):
 		return []
@@ -443,8 +447,8 @@ class MDP_node:
 	def getPossibleActions(self, design_dict):
 		known_params = []
 		possible_actions = {}
-
-		if self.percent_unknown < 0.6:
+		#if self.perct_unknown <=0:
+		if self.percent_unknown <= 0:
 			return {}
 
 		#gets a list of the known params only
@@ -481,12 +485,17 @@ class MDP_node:
 		if len(sub_des_list) > 0:
 			min_param_len = min(sub_des_list,key=lambda item:item[1])[1]
 		for item in sub_des_list:
-			if item[1] == min_param_len:
+			#if item[1] == min_param_len:
+			#we know at least 50% of the params
+			print "perct known for next considered design = ", float(float(len(known_params))/float(len(item[0].params)))
+			if float(float(len(known_params))/float(len(item[0].params))) >= 0.5:
 				successors.append(str(item[0].id))
-			
+		
+		#then choose only smallest designs ... why do we need this??	
 		if len(successors) > 0:
 			min_des_len = len(min(successors,key=lambda item:len(item)))
 			for thing in successors:
+				#if len(known_set) 
 				if len(thing) == min_des_len:
 					actions.update({thing: []})
 
@@ -506,7 +515,7 @@ class MDP_node:
 
 		return actions
 
-	def getRewards(self, design_dict):
+	def isTerminal(self):
 		return 0
 	
 
@@ -519,7 +528,7 @@ class beluga_obj:
     def __init__(self, language, design_obj):
     	#self.species = ['g0','g1','g2']
     	self.species = design_obj.species
-    	self.promoters = ['p0','p1','p2']
+    	self.promoters = ['p0','p1']
     	self.goal = design_obj.output
     	self.testdata = design_obj.testdata
     	self.Ls = []
@@ -528,6 +537,7 @@ class beluga_obj:
     	self.param_space = {}
     	self.design_space = self.genGraph(language)
     	self.belugaMDP = self.initMDP()
+    	#self.MDP_rewards = updateRewards(0)
     	#self.policy = self.initPolicy()
     	
     	
@@ -602,7 +612,7 @@ class beluga_obj:
     	print "Num Designs in Space = ", len(design_dict)
     	print "Param space: ", self.param_space
     	#print "len of intersection of [p0,g0] and [p0,g1,p0,g0] params: ", len(set(design_dict["['p0', 'g0']"].params).intersection(set(design_dict["['p1', 'g0']"].params)))
-    	
+    	print "design p0,g1|p1,g0 model: ", design_dict["['p0', 'g1', 'p1', 'g0']"].model
     	return design_dict
 
     def getTransitionsandProb(self,state,action):
@@ -628,7 +638,7 @@ class beluga_obj:
     	for p_key, p in start_node.symb_param.iteritems():
     		start_node.symb_param.update({p_key: 1})
     	print "Start node symb params = ", start_node.symb_param
-    	start_node.actions = {"['p0', 'g0']": [], "['p1', 'g0']": [], "['p2', 'g0']": []}
+    	#start_node.actions = {"['p0', 'g0']": [], "['p1', 'g0']": [], "['p2', 'g0']": []}
     	start_node.history.append("None")
     	start_element = ("S"+str(s_key), start_node)
     	mdp_Q.push(start_element)
@@ -639,6 +649,7 @@ class beluga_obj:
     		#just basically do what i was doing before but the successors will be different
     		#should probably just redo building of the inital design space state graph
     		#basically the getsuccessors needs to look at params NOT parts! But otherwise it's the same.
+    	#ALSO, determine initial policies for each state by choosing simplest action
 
     	while mdp_Q.isEmpty()==0:
     		mdpelement = mdp_Q.pop()
@@ -684,170 +695,93 @@ class beluga_obj:
     			new_element = ("S"+str(s_key), new_mdpnode)
     			print "PUSHING ELEMENT", new_element[0], "TO QUEUE"
     			mdp_Q.push(new_element)
-
-
-    	# 	if perct_unk >= 0.6 :
-    	# 		#getLegalActions here ... by basically doing what getSuccessors does for design_dict
-    	# 		#except instead of the thing it's looking at being the current design and it's successors 
-    	# 		#it's the current state of knowledge and it's possible actions
-    	# 		#this is used for everything mdp node except the start node
-    	# 		mdpnode.getPossibleActions(self.design_space)
-
-    	# 		for action, s_prime in mdpnode.actions.iteritems():
-					# a_des_params = self.design_space[action].params
-					# exp_des_params = []
-					# s_key += 1
-					# new_symb_param = dict(mdpnode.symb_param)
-
-					# for param in a_des_params:
-					# 	new_symb_param[param] = 0
-
-					# new_mdpnode = MDP_node(action, self.design_space)
-					# new_mdpnode.symb_param = new_symb_param
-
-					# new_mdpnode.history = list(mdpnode.history)
-					# new_mdpnode.history.append(action)
-
-					# sym_param_sum = 0
-					# for v_key, val in new_mdpnode.symb_param.iteritems():
-					# 	sym_param_sum += val
-					# perct_unknown = float(float(sym_param_sum)/float(len(new_symb_param)))
-
-					# if perct_unknown >= 0.6 :
-					# 	for succ in self.design_space[action].successors:
-					# 		if succ not in new_mdpnode.history:
-					# 			new_mdpnode.actions.update({succ: []})
-					# else:
-					# 	new_mdpnode.actions = {}
-					# prob = 0.9
-
-					# mdpnode.actions[action].append(("S"+str(s_key),prob))
-					# mdpnode.actions[action].append((key,1-prob))
-					# new_element = ("S"+str(s_key), new_mdpnode)
-					# print "PUSHING ELEMENT", new_element[0], "TO QUEUE"
-					# mdp_Q.push(new_element)
-
     					
     		print "actions after = ", mdpnode.actions
     		print "symb params = ", mdpnode.symb_param
     		print "history after = ", mdpnode.history
 
     	print "Num MDP states = ", len(mdp_dict)
-
     	return mdp_dict
 
     def initPolicy(self):
     	#start with MDP_graph[0] ... i.e. S0
     	#for every state in MDP_graph, determine leftmost action it can take (indx of first successor of design in des_space)
     	#update self.policy with {s:des_indx}
+    	#actually i think i'll init to explore actions - or the simplest designs i guess
+
+
+    	#Start with start of MDP, follow the policy until it terminates and store and return this policy.
     	return 0
 
-    def getTransition(self):
-    	#these are computed based on the current state and its successors
-    	#we can initially assume something of a uniform distribution
-    	return 0
 
-    def getReward(self):
-    	#this is computed by the current state's design
-    	#specifically it's parameters as well as it's MC distance from the goal behavior
-    	#(using current param space knowledge)
-    	return 0
+    def updateRewards(self, iter_num):
+		"""
+		The reward returned by a state will be a weighted function of the number of new parameters it learned 
+		AND the average distance between a monte carlo simulation of action (design) a and the desired goal 
+		behavior (i.e the Error of action a). The weights for each element of the reward function will change 
+		as a function of time. To encourage exploration of unknown parameters early on, the weight for successfully 
+		learning new parameters will begin high and degrade over time. To encourage the agent to seek out a design 
+		which behaves to the user's defined behavior spec, the weight for the error will begin low and will 
+		increase significantly over time. I will have a funtion R(s,a,s') to represent rewards for each state.
+		"""
+		#So that we simulate all the states in the current policy only once before each policy eval/improvement
+		return 0
+
+	# def findPolicy(self, cur_policy):
+
+	# 	unchanged = True
+
+	# 	while unchanged:
+	# 		#policy evaluation:
+	# 			#for each state in the cur_policy, determine the value of the policy from following the cur_policy
+	# 			#iterate until value of policy converges 
+	# 		iterations = 100
+	# 		discount = 0.9
+	# 		values = util.Counter() #may change this to be read from an element in mdp node
+
+	# 		for k in range iterations:
+	# 			vVal_dict = util.Counter()
+
+	# 			for s, action in cur_policy.iteritems():
+	# 				qVal = 0
+	# 				for t in belugaMDP[s].actions[action]:
+	# 					t_prob = t[1]
+	# 					nextstate = t[0]
+	# 					qVal += t+prob*(self.getReward(s, action, nextstate)) + discount*values[nextstate]
+	# 				vVal_dict[s] = qVal
+
+	# 			for s, action in cur_policy.iteritems():
+	# 				values[s] = vVal_dict[s]
+
+	# 		#at the end of this you have the updated value of each state in the current policy
+
+	# 		#policy improvement:
+	# 			#for each state in the cur_policy,
+	# 			cur_policy_copy = dict(cur_policy)
+
+	# 			if cur_policy_copy == cur_policy 
+
+	# 	return new_policy
+
+	# def executePolicy(self, cur_policy, cur_state):
+
+	# 	return 0
+
 
     def search(self):
-    	#getStartNode()
-    	#initPolicy()
+    	#cur_state = getStartState()
+    	#policy_dict = initPolicy() ... for each state in the full MDP state space, choose the simplest action
 
-    	#while terminal state not experimentally reached:
-    		#find optimal policy
+    	#while !cur_state.isTerminal(): ... while terminal state not experimentally reached:
+    		#policy_dict = findPolicy(policy_dict) ... find optimal policy
 	    		#evaluate current policy
 	    			#compute values (using transition and reward) for each state following current policy
 	    		#improve policy
-	    	#do one step of current policy
+	    	#next_state = execute_polcy(policy_dict, cur_state) ... do one step of current policy
 	    		#update learned global parameters for next round of sims
-	    		#make current step new start node
+	    		#update rewards
+	    	#cur_state = next_state ... make current step new start node
 
     	return 0
 
 
-    # def getDesignError(self, des_node, goal_beh):
-    # 	#simulate the cur_des using it's des_node[0].model and using des_node[1] knowledge
-    # 	#and determine the probability that it generated the goal behavior?  
-    # 	return 1
-
-    # def getStartState(self):
-    # 	start_des = self.design_space[0]
-    # 	start_knowledge = self.param_space
-    # 	return (start_des,start_knowledge)
-
-    # def isGoalState(self, des_node):
-    # 	#90% of all params narrowed down? (we could eliminate params who are tied to known 0 params)
-    # 	#So if 10% unknown
-    # 	#OR
-    # 	#design with 10% error
-    # 	isgoal = False
-    	
-    # 	cur_des = des_node[0]
-    # 	cur_param_know = des_node[1]
-    # 	param_range_sum = 0
-    # 	total_unknown_sum = 0
-
-    # 	#Do parameter inference for this design and update its cur_param_know
-    # 	cur_param_know = cur_des.testDesign(cur_param_know,self.testdata)
-
-    # 	for key in cur_param_know:
-    # 		param_range_sum += cur_param_know[key][1] - cur_param_know[key][0]
-    # 		total_unknown_sum += 10
-
-    # 	perc_unknown = param_range_sum / total_unknown_sum
-
-    # 	if self.getDesignError(des_node,self.goal) < 0.10:
-    # 		print "We found a design that works!"
-    # 		return True
-
-    # 	if perc_unknown < 0.10:
-    # 		print "We know enough to say no such design exists in this space."
-    # 		return True
-
-    # 	return False
-
-    # def getSearchSuccessors(self, node):
-    # 	#returns successor states, actions they require, and a cost of 1
-    # 	#returns all successor designs in node[0].successors and appends the current knowledge state to it and cost
-    # 	return 0
-
-    # def heuristic(self, des_node):
-    # 	#distance is just how far we are from knowing all params (reducing uncertainy)
-    # 	return 0
-
-    # def search(self):
-	   #  #fringe = util.PriorityQueue()
-	   #  fringe = util.Queue()
-	   #  start_state = self.getStartState()
-	   #  #fringe.push([start_state],heuristic(start_state))
-	   #  fringe.push([start_state])
-	    
-	   #  visited = []
-	    
-	   #  while fringe.isEmpty()==0:
-	   #      path = fringe.pop()
-	   #      node = path[-1]
-	   #      if node != start_state:
-	   #          node = node[0]
-	        
-	   #      visited.append(node)
-	        
-	   #      if self.isGoalState(node):
-	   #          actions = getPathActions(path, problem)
-	   #          return actions
-
-	   #      for i in self.getSearchSuccessors(node):
-	   #          if(i[0] not in visited):
-	   #              new_path = list(path)
-	   #              new_path.append(i)
-	                
-	   #              actions = getPathActions(new_path,problem)
-	   #              fringe.push(new_path)
-	   #              #fringe.push(new_path,problem.getCostOfActions(actions)+heuristic(node,problem))
-	                
-	   #  print "somehow fringe is empty?"
-	   #  return 0
