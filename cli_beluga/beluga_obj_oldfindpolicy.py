@@ -439,7 +439,7 @@ class MDP_node:
 		self.percent_unknown = 1
 		self.history = []
 		self.policy = []
-		self.terminal_reward = (0,-1)
+		self.terminal_reward = None
 		self.vVal = 0
 
 	def getSymbParams(self, design_space):
@@ -538,7 +538,7 @@ class beluga_obj:
     	self.param_space = {}
     	self.design_space = self.genGraph(language)
     	self.belugaMDP = self.initMDP()
-    	self.MDP_rewards = {}
+    	#self.MDP_rewards = updateRewards(0)
     	#self.policy = self.initPolicy()
     	
     	
@@ -690,8 +690,8 @@ class beluga_obj:
     			#This way of getting prob doesn't seem right
     			prob = 1 - (perct_unk-perct_unknown)
     			
-    			actions[action].append(("S"+str(s_key),prob,(0,-1)))
-    			actions[action].append((key,1-prob,(0,-1)))
+    			actions[action].append(("S"+str(s_key),prob,(0,None)))
+    			actions[action].append((key,1-prob,(0,None)))
     			mdpnode.actions = dict(actions)
     			new_element = ("S"+str(s_key), new_mdpnode)
     			print "PUSHING ELEMENT", new_element[0], "TO QUEUE"
@@ -718,130 +718,100 @@ class beluga_obj:
     	print policy
     	return policy
 
-    def learn(self,curstate,nxtstate):
-    	return 10
 
-    def goal_dist(self, action):
-    	print "action = ", action
-    	print "simulating model = ", self.design_space[action].model
-    	return 10
+  #   def updateRewards(self, iter_num):
+		# """
+		# The reward returned by a state will be a weighted function of the number of new parameters it learned 
+		# AND the average distance between a monte carlo simulation of action (design) a and the desired goal 
+		# behavior (i.e the Error of action a). The weights for each element of the reward function will change 
+		# as a function of time. To encourage exploration of unknown parameters early on, the weight for successfully 
+		# learning new parameters will begin high and degrade over time. To encourage the agent to seek out a design 
+		# which behaves to the user's defined behavior spec, the weight for the error will begin low and will 
+		# increase significantly over time. I will have a funtion R(s,a,s') to represent rewards for each state.
+		# """
+		# #So that we simulate all the states in the current policy only once before each policy eval/improvement
+		# return 0
 
-    def getTerminalVal(self, state, iter_num):
-    	# if self.belugaMDP[state].terminal_reward[1]!=iter_num:
-    	# 	terminal_reward = (self.goal_dist(self.belugaMDP[state].history[-1]), iter_num)
-    	action = self.belugaMDP[state].history[-1]
+	def getTerminalVal(self,state, iter_num):
+		if self.belugaMDP[state].terminal_reward[1]!=iter_num:
+			terminal_reward = (goal_dist(self.belugaMDP[state].history[-1]), iter_num)
+		return terminal_reward[0]
+	
+	def learn(self,curstate,nxtstate):
+		return 0
 
-    	if action not in self.MDP_rewards:
-    		self.MDP_rewards.update({action: (iter_num, self.goal_dist(action))})
-    	elif self.MDP_rewards[action][0] != iter_num:
-    		self.MDP_rewards.update({action: (iter_num, self.goal_dist(action))})
-    	
-    	return self.MDP_rewards[action][1]
-    	#return terminal_reward[0]
+	def goal_dist(self, action):
+		return 0
 
-    def getReward(self, cur_state, action, next_state, iter_num):
-    	"""
-    	The reward returned by a state will be a weighted function of the number of new parameters it learned 
-    	AND the average distance between a monte carlo simulation of action (design) a and the desired goal 
-    	behavior (i.e the Error of action a). The weights for each element of the reward function will change 
-    	as a function of time. To encourage exploration of unknown parameters early on, the weight for successfully 
-    	learning new parameters will begin high and degrade over time. To encourage the agent to seek out a design 
-    	which behaves to the user's defined behavior spec, the weight for the error will begin low and will 
-    	increase significantly over time. I will have a funtion R(s,a,s') to represent rewards for each state.
-    	"""
-    	#So that we simulate all the states in the current policy only once before each policy eval/improvement
-    	reward = 0
-    	update = False
-    	new_rew = ()
-    	new_tuple = ()
+	def getRewards(self, cur_state, action, next_state, iter_num):
+		"""
+		The reward returned by a state will be a weighted function of the number of new parameters it learned 
+		AND the average distance between a monte carlo simulation of action (design) a and the desired goal 
+		behavior (i.e the Error of action a). The weights for each element of the reward function will change 
+		as a function of time. To encourage exploration of unknown parameters early on, the weight for successfully 
+		learning new parameters will begin high and degrade over time. To encourage the agent to seek out a design 
+		which behaves to the user's defined behavior spec, the weight for the error will begin low and will 
+		increase significantly over time. I will have a funtion R(s,a,s') to represent rewards for each state.
+		"""
+		#So that we simulate all the states in the current policy only once before each policy eval/improvement
+		for item in self.belugaMDP[cur_state].actions[action]:
+			if (item[0] == next_state):
+				if (item[2][0]!=iter_num):
+					item[2][1] = self.learn(cur_state,next_state) + self.goal_dist(action)
+					item[2][0] = iter_num
+				return item[2][1]
+		#for the passed action in actions return learn(cur_state,next_state) + goal_dist(action)
+		return 0
 
-    	if action not in self.MDP_rewards:
-    		self.MDP_rewards.update({action: (iter_num, self.learn(cur_state,next_state) + self.goal_dist(action))})
-    	elif self.MDP_rewards[action][0] != iter_num:
-    		self.MDP_rewards.update({action: (iter_num, self.learn(cur_state,next_state) + self.goal_dist(action))})
-    	
-    	return self.MDP_rewards[action][1]
-    	# for item in self.belugaMDP[cur_state].actions[action]:
-    	# 	print "item: ", item
-    	# 	if (item[0] == next_state):
-    	# 		if (item[2][0]!=iter_num):
-    	# 			new_rew = (iter_num, self.learn(cur_state,next_state) + self.goal_dist(action))
-    	# 			new_tuple = (item[0], item[1], new_rew)
-    	# 			update = True
-    	# 			indx = self.belugaMDP[cur_state].actions[action].index(item)
-    	# 			print indx, "\n\n"
-    	# 			self.belugaMDP[cur_state].actions[action][indx] = new_tuple
-    	# 			#print "ITEM ", item
-    	# 			#print self.belugaMDP[cur_state].actions[action][indx]
-    	# 			return new_rew[1]
-    	# 		else:
-    	# 			return item[2][1] 
+	# def findPolicy(self, cur_policy, cur_round):
+	# 	unchanged = True
 
-    def findPolicy(self, policy, cur_round):
-    	unchanged = False
-    	cur_policy = policy
-    	while unchanged==False:
-    		#policy evaluation:
-    		#for each state in the cur_policy, determine the value of the policy from following the cur_policy
-    		#iterate until value of policy converges 
-    		iterations = 100
-    		discount = 0.9
-    		values = util.Counter() #may change this to be read from an element in mdp node
-    		print "\nONE ITERATION: "
-    		print "Policy being evaluated: ", cur_policy
-    		for k in range (0,iterations):
-    			vVal_dict = util.Counter()
+	# 	while unchanged:
+	# 		#policy evaluation:
+	# 			#for each state in the cur_policy, determine the value of the policy from following the cur_policy
+	# 			#iterate until value of policy converges 
+	# 		iterations = 100
+	# 		discount = 0.9
+	# 		values = util.Counter() #may change this to be read from an element in mdp node
 
-    			for s, action in cur_policy.iteritems():
-    				qVal = 0
-    				for t in self.belugaMDP[s].actions[action]:
-    					t_prob = t[1]
-    					nextstate = t[0]
-    					#if nextstate = terminal state:
-    					if len(self.belugaMDP[nextstate].actions) < 1:
-    						values[nextstate] = int(self.getTerminalVal(nextstate, cur_round))
-    					qVal += int(t_prob*(self.getReward(s, action, nextstate, cur_round)) + discount*values[nextstate])
-    				vVal_dict[s] = qVal
-    			
-    			for s, action in cur_policy.iteritems():
-    				values[s] = vVal_dict[s]
-    		print "Values of policy ", k , " - ", values, "\n\n"
-    		#policy improvement:
-    		new_policy = dict(cur_policy)
-    		#for each state in the cur_policy
-    		for s, origaction in cur_policy.iteritems():
-    			# val = 0
-    			# maxVal = 0
-    			#print self.belugaMDP[s].actions
-    			for a, transitions in self.belugaMDP[s].actions.iteritems():
-    				val = 0
-    				for t in transitions:
-    					t_prob = t[1]
-    					nextstate = t[0]
-    					if len(self.belugaMDP[nextstate].actions) < 1:
-    						values[nextstate] = int(self.getTerminalVal(nextstate, cur_round))
-    					val += int(t_prob*(self.getReward(s, action, nextstate, cur_round)) + discount*values[nextstate])
+	# 		for k in range (0,iterations):
+	# 			vVal_dict = util.Counter()
 
-    				#print "\n\nvalue for state ", s, " action ", a, " = ", val
-    				#vVal_dict[s] = qVal
-    				if val > values[s]:
-    					new_policy.update({ s: a})
-    					#print "new_policy is", new_policy
-    		#temporary
-    		#print "CURRENT POLICY = ", cur_policy
-    		print "NEW POLICY ", new_policy
-    		mismatch = 0
-    		for s, curaction in cur_policy.iteritems():
-    			if new_policy[s] != cur_policy[s]:
-    				mismatch = mismatch + 1
-    		#print "MISTMATCH ", mismatch
-    		if mismatch == 0:
-    			unchanged = True
-    		else:
-    			cur_policy = dict(new_policy)
-    			print "Policy improved to: ", cur_policy
-    	print "DESE VALUES for the first policy, iteration ", k , " - ", values
-    	return new_policy
+	# 			for s, action in cur_policy.iteritems():
+	# 				qVal = 0
+	# 				for t in belugaMDP[s].actions[action]:
+	# 					t_prob = t[1]
+	# 					nextstate = t[0]
+	# 					#if nextstate = terminal state:
+	# 					if len(self.belugaMDP[nextstate].actions) < 1:
+	# 						values[nextstate] = self.getTerminalVal(nextstate, cur_round)
+	# 					qVal += t_prob*(self.getReward(s, action, nextstate, cur_round)) + discount*values[nextstate]
+	# 				vVal_dict[s] = qVal
+
+	# 			for s, action in cur_policy.iteritems():
+	# 				values[s] = vVal_dict[s]
+
+	# 		#temporary
+	# 		unchanged = False
+	# 	return cur_policy
+
+	# # 		#at the end of this you have the updated value of each state in the current policy
+
+	# 		#policy improvement:
+	# 			#for each state in the cur_policy,
+	# 			cur_policy_copy = dict(cur_policy)
+
+	# 			if cur_policy_copy == cur_policy 
+
+		
+		#return new_policy
+
+	# def executePolicy(self, cur_policy, cur_state):
+
+		#return 0
+
+	def findPolicy(self, cur_policy, cur_round):
+    	return {}
 
     def search(self):
     	print "IN SEARCH - here's the mdp:", self.belugaMDP
@@ -849,15 +819,19 @@ class beluga_obj:
     	policy_dict = self.initPolicy() #... for each state in the full MDP state space, choose the simplest action
     	#print "Init policy is: ", policy_dict
     	alg_round = 1
+
     	#while !cur_state.isTerminal(): ... while terminal state not experimentally reached:
     	#while len(cur_state.actions) > 0:
     	policy_dict = self.findPolicy(policy_dict, alg_round) #... find optimal policy
-    			#evaluate current policy
-    				#compute values (using transition and reward) for each state following current policy
-    			#improve policy
-    				#next_state = execute_polcy(policy_dict, cur_state) ... do one step of current policy
-    		#update learned global parameters for next round of sims
-    		#update rewards
-    		#cur_state = next_state #... make current step new start node
-    		#alg_round = alg_round + 1
+	    		#evaluate current policy
+	    			#compute values (using transition and reward) for each state following current policy
+	    		#improve policy
+	    	#next_state = execute_polcy(policy_dict, cur_state) ... do one step of current policy
+	    		#update learned global parameters for next round of sims
+	    		#update rewards
+	    	#cur_state = next_state #... make current step new start node
+	    	#alg_round = alg_round + 1
+
     	return 0
+
+
