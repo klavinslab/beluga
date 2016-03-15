@@ -3,7 +3,9 @@ from sympy import *
 import os, sys
 import errno
 import util
+import random
 from scipy.integrate import odeint
+from scipy.spatial import distance
 
 sub_model = []
 project_path = "/Users/Leli/beluga_cli_test_dir/ABCSMC"
@@ -635,7 +637,7 @@ class beluga_obj:
     	mdp_dict = {}
     	s_key = 0
     	start_node = MDP_node(None, self.design_space)
-    	start_node.symb_param = self.param_space #copy all keys in global param list and put a 1 value next to it
+    	start_node.symb_param = dict(self.param_space) #copy all keys in global param list and put a 1 value next to it
     	for p_key, p in start_node.symb_param.iteritems():
     		start_node.symb_param.update({p_key: 1})
     	print "Start node symb params = ", start_node.symb_param
@@ -719,10 +721,38 @@ class beluga_obj:
     	return policy
 
     def learn(self,curstate,nxtstate):
-    	return 10
+    	total_param_range = 0
+    	for p, pranges in self.param_space.iteritems():
+    		total_param_range += pranges[1] - pranges[0]
+    	learn = -1 * float(float(total_param_range)/float(10*len(self.param_space)))
+    	return learn
 
     def goal_dist(self, action):
     	print "action = ", action
+    	global sub_model
+    	num_sims = 10
+    	num_accepted = 0
+    	epsilon = 10
+
+    	for i in range(0, num_sims):
+    		submat = {}
+    		for param, prange in self.param_space.iteritems():
+    			submat.update({str(param) : random.uniform(prange[0],prange[1])})
+    		print "submat ISSSS ---- ", submat
+    		sub_model = self.design_space[action].model.subs(submat)
+    		init_species = [1,1,1]
+    		t_out = np.arange(0,25,1)
+    		sim_out = odeint(odeint_model,init_species,t_out)
+    		#print "SIMULATION of design ", des, ":"
+    		g0_res, g1_res, g2_res = sim_out.T
+    		#dist = 0
+    		dist = distance.euclidean(np.array(g0_res), np.array(self.goal[1]))
+    		if dist <= 10:
+    			num_accepted = num_accepted + 1
+    		# print "SIM RESULTS: ", list(g0_res)
+    		# print "GOAL: ", self.goal
+    		# print "Distance = ", dist
+    	print "goal_dist = ", float(float(num_accepted)/float(num_sims))
     	print "simulating model = ", self.design_space[action].model
     	return 10
 
@@ -730,11 +760,17 @@ class beluga_obj:
     	# if self.belugaMDP[state].terminal_reward[1]!=iter_num:
     	# 	terminal_reward = (self.goal_dist(self.belugaMDP[state].history[-1]), iter_num)
     	action = self.belugaMDP[state].history[-1]
+    	if iter_num == 1 :
+    		if action not in self.MDP_rewards:
+    			self.MDP_rewards.update({action: (iter_num, 0)})
+    		elif self.MDP_rewards[action][0] != iter_num:
+    			self.MDP_rewards.update({action: (iter_num, 0)})
+    		return self.MDP_rewards[action][1]
 
     	if action not in self.MDP_rewards:
-    		self.MDP_rewards.update({action: (iter_num, self.goal_dist(action))})
+    		self.MDP_rewards.update({action: (iter_num, e**(iter_num+2) * self.goal_dist(action))})
     	elif self.MDP_rewards[action][0] != iter_num:
-    		self.MDP_rewards.update({action: (iter_num, self.goal_dist(action))})
+    		self.MDP_rewards.update({action: (iter_num, e**(iter_num+2) * self.goal_dist(action))})
     	
     	return self.MDP_rewards[action][1]
     	#return terminal_reward[0]
@@ -754,28 +790,19 @@ class beluga_obj:
     	update = False
     	new_rew = ()
     	new_tuple = ()
+    	if iter_num == 1 :
+    		if action not in self.MDP_rewards:
+    			self.MDP_rewards.update({action: (iter_num, self.learn(cur_state,next_state))})
+    		elif self.MDP_rewards[action][0] != iter_num:
+    			self.MDP_rewards.update({action: (iter_num, self.learn(cur_state,next_state))})
+    		return self.MDP_rewards[action][1]
 
     	if action not in self.MDP_rewards:
-    		self.MDP_rewards.update({action: (iter_num, self.learn(cur_state,next_state) + self.goal_dist(action))})
+    		self.MDP_rewards.update({action: (iter_num, self.learn(cur_state,next_state) + e**iter_num * self.goal_dist(action))})
     	elif self.MDP_rewards[action][0] != iter_num:
-    		self.MDP_rewards.update({action: (iter_num, self.learn(cur_state,next_state) + self.goal_dist(action))})
+    		self.MDP_rewards.update({action: (iter_num, self.learn(cur_state,next_state) + e**iter_num * self.goal_dist(action))})
     	
     	return self.MDP_rewards[action][1]
-    	# for item in self.belugaMDP[cur_state].actions[action]:
-    	# 	print "item: ", item
-    	# 	if (item[0] == next_state):
-    	# 		if (item[2][0]!=iter_num):
-    	# 			new_rew = (iter_num, self.learn(cur_state,next_state) + self.goal_dist(action))
-    	# 			new_tuple = (item[0], item[1], new_rew)
-    	# 			update = True
-    	# 			indx = self.belugaMDP[cur_state].actions[action].index(item)
-    	# 			print indx, "\n\n"
-    	# 			self.belugaMDP[cur_state].actions[action][indx] = new_tuple
-    	# 			#print "ITEM ", item
-    	# 			#print self.belugaMDP[cur_state].actions[action][indx]
-    	# 			return new_rew[1]
-    	# 		else:
-    	# 			return item[2][1] 
 
     def findPolicy(self, policy, cur_round):
     	unchanged = False
@@ -787,8 +814,8 @@ class beluga_obj:
     		iterations = 100
     		discount = 0.9
     		values = util.Counter() #may change this to be read from an element in mdp node
-    		print "\nONE ITERATION: "
-    		print "Policy being evaluated: ", cur_policy
+    		#print "\nONE ITERATION: "
+    		#print "Policy being evaluated: ", cur_policy
     		for k in range (0,iterations):
     			vVal_dict = util.Counter()
 
@@ -805,7 +832,7 @@ class beluga_obj:
     			
     			for s, action in cur_policy.iteritems():
     				values[s] = vVal_dict[s]
-    		print "Values of policy ", k , " - ", values, "\n\n"
+    		#print "Values of policy ", k , " - ", values, "\n\n"
     		#policy improvement:
     		new_policy = dict(cur_policy)
     		#for each state in the cur_policy
@@ -829,7 +856,7 @@ class beluga_obj:
     					#print "new_policy is", new_policy
     		#temporary
     		#print "CURRENT POLICY = ", cur_policy
-    		print "NEW POLICY ", new_policy
+    		#print "NEW POLICY ", new_policy
     		mismatch = 0
     		for s, curaction in cur_policy.iteritems():
     			if new_policy[s] != cur_policy[s]:
@@ -839,25 +866,45 @@ class beluga_obj:
     			unchanged = True
     		else:
     			cur_policy = dict(new_policy)
-    			print "Policy improved to: ", cur_policy
-    	print "DESE VALUES for the first policy, iteration ", k , " - ", values
+    			#print "Policy improved to: ", cur_policy
+    	#print "DESE VALUES for the first policy, iteration ", k , " - ", values
     	return new_policy
+
+    def execute_policy(self, policy, cur_state, cur_state_name):
+    	print cur_state
+    	action = policy[cur_state_name]
+    	#do param inference for design using char data
+    	#update self.param_space
+    	global sub_model
+    	sub_model = self.design_space[action].model.subs(self.testdata)
+    	init_species = [1,1,1]
+    	t_out = np.arange(0,25,1)
+    	sim_out = odeint(odeint_model,init_species,t_out)
+    	#print "SIMULATION of design ", des, ":"
+    	g0_res, g1_res, g2_res = sim_out.T
+    	print "\n Doing experiment ", action, ": "
+    	print list(g0_res)
+    	return cur_state
 
     def search(self):
     	print "IN SEARCH - here's the mdp:", self.belugaMDP
     	cur_state = self.belugaMDP['S0']
+    	cur_state_name = 'S0'
     	policy_dict = self.initPolicy() #... for each state in the full MDP state space, choose the simplest action
     	#print "Init policy is: ", policy_dict
     	alg_round = 1
     	#while !cur_state.isTerminal(): ... while terminal state not experimentally reached:
     	#while len(cur_state.actions) > 0:
     	policy_dict = self.findPolicy(policy_dict, alg_round) #... find optimal policy
+    	print "current optimal policy ", policy_dict
+    	print "\ntest data = ", self.testdata
+    	print "\nparam space = ", self.param_space
     			#evaluate current policy
     				#compute values (using transition and reward) for each state following current policy
     			#improve policy
-    				#next_state = execute_polcy(policy_dict, cur_state) ... do one step of current policy
-    		#update learned global parameters for next round of sims
-    		#update rewards
-    		#cur_state = next_state #... make current step new start node
-    		#alg_round = alg_round + 1
+    	next_state = self.execute_policy(policy_dict, cur_state, cur_state_name) #... do one step of current policy
+    	####X -update learned global parameters for next round of sims (should be done in execute policy)
+    	####X -update rewards
+    	#cur_state = next_state #... make current step new start node
+    	#alg_round = alg_round + 1
     	return 0
