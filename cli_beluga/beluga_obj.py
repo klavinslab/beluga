@@ -1,15 +1,62 @@
+import emcee
+import corner
 import numpy as np
 from sympy import *
 import os, sys
+import contextlib
 import errno
 import util
 import random
+import math
+import matplotlib.pyplot as pl
+import scipy.optimize as op
+from scipy.optimize import curve_fit
+from scipy.optimize import leastsq
 from scipy.integrate import odeint
 from scipy.spatial import distance
+from scipy.signal import savgol_filter
+from matplotlib.ticker import MaxNLocator
 
 sub_model = []
+sim_model = []
 project_path = "/Users/Leli/beluga_cli_test_dir/ABCSMC"
 
+sims_total = 0
+
+def fileno(file_or_fd):
+    fd = getattr(file_or_fd, 'fileno', lambda: file_or_fd)()
+    if not isinstance(fd, int):
+        raise ValueError("Expected a file (`.fileno()`) or a file descriptor")
+    return fd
+
+@contextlib.contextmanager
+def stdout_redirected(to=os.devnull, stdout=None):
+    """
+    http://stackoverflow.com/a/22434262/190597 (J.F. Sebastian)
+    """
+    if stdout is None:
+       stdout = sys.stdout
+
+    stdout_fd = fileno(stdout)
+    # copy stdout_fd before it is overwritten
+    #NOTE: `copied` is inheritable on Windows when duplicating a standard stream
+    with os.fdopen(os.dup(stdout_fd), 'wb') as copied: 
+        stdout.flush()  # flush library buffers that dup2 knows nothing about
+        try:
+            os.dup2(fileno(to), stdout_fd)  # $ exec >&to
+        except ValueError:  # filename
+            with open(to, 'wb') as to_file:
+                os.dup2(to_file.fileno(), stdout_fd)  # $ exec > to
+        try:
+            yield stdout # allow code to be run with the redirected stdout
+        finally:
+            # restore stdout to its previous value
+            #NOTE: dup2 makes stdout_fd inheritable unconditionally
+            stdout.flush()
+            os.dup2(copied.fileno(), stdout_fd)  # $ exec >&copied
+
+def func(x, a, b, c):
+	return a * np.exp(-b * x) + c
 
 def is_sublist(a,b):
 	if a == []:
@@ -39,8 +86,9 @@ def sum_cols(mat):
 def odeint_model(x_vec,t):
 	global sub_model
 	G0, G1, G2 = symbols("G0, G1, G2")
-	temp_g0, temp_g1, temp_g2 = x_vec
-	new_values = list(sub_model.subs({G0: temp_g0, G1: temp_g1, G2: temp_g2}))
+	temp_g0, temp_g1 = x_vec
+	new_values = list(sub_model.subs({G0: temp_g0, G1: temp_g1}))
+	#print "new values", new_values
 	return new_values
 
 def gen_ODE_file(design_name, design, dir_str):
@@ -209,6 +257,69 @@ def genABCSMCInputFile(param_space, tester_data, model_str, models, dir_str, sim
     
     file.close()
 
+def lnprior(theta):
+    m, b, lnf = theta
+    if -5.0 < m < 0.5 and 0.0 < b < 10.0 and -10.0 < lnf < 1.0:
+        return 0.0
+    return -np.inf
+def lnlike(theta, x, y, yerr):
+    m, b, lnf = theta
+    #print "\nChosen params: ", theta
+    model = m * x + b
+    inv_sigma2 = 1.0/(yerr**2 + model**2*np.exp(2*lnf))
+    res = -0.5*(np.sum((y-model)**2*inv_sigma2 - np.log(inv_sigma2)))
+    # print "model = ", model
+    # print "y = ", y
+    # print "Result: ", res
+    return res
+def lnprob(theta, x, y, yerr):
+    lp = lnprior(theta)
+    if not np.isfinite(lp):
+        return -np.inf
+    return lp + lnlike(theta, x, y, yerr)
+
+def mymichelis_menten(self, x_vec, t, *args):
+	#print args
+	#print args[0]
+	#print args[1]
+	global sub_model
+	params = {"L00": args[0], "K00": args[1]}
+	sub_model = self.design_space["['p0', 'g0']"].model.subs(params)
+	G0, G1, G2 = symbols("G0, G1, G2")
+	temp_g0, temp_g1 = x_vec
+	new_values = list(sub_model.subs({G0: temp_g0, G1: temp_g1}))
+	new_values = 0
+	return new_values
+
+def mylnprior(theta):
+    L00, K00 = theta
+    if 0.0 < L00 < 10.0 and 0.0 < K00 < 10.0:
+        return 0.0
+    return -np.inf
+
+# def mylnlike(theta, x, g0):
+#     #L00, K00 = theta
+#     init_species = [1,1,1]
+#     t_out = np.arange(0,25,1)
+#     p = tuple(theta)
+#     print "chosen params: ", p
+#     params = p[0], p[1]
+#     print "params again: ", params
+#     sim_P = odeint(mymichelis_menten, init_species, t_out, args=params).flatten()
+#     #res = distance.euclidean(np.array(sim_P.T[0]), np.array(g0))
+#     res = np.sum((np.array(sim_P.T[0]) - np.array(g0))**2)
+#     return res
+    #return sim_P.T[0] - g0
+    # model = m * x + b
+    # inv_sigma2 = 1.0/(yerr**2 + model**2*np.exp(2*lnf))
+    #return -0.5*(np.sum((y-model)**2*inv_sigma2 - np.log(inv_sigma2)))
+
+def mylnprob(theta, x, g0):
+    lp = mylnprior(theta)
+    if not np.isfinite(lp):
+        return -np.inf
+    return lp + mylnlike(theta, x, g0)
+
 
 class design:
 	def __init__(self, des_str):
@@ -287,7 +398,7 @@ class design:
 	    	if gene in self.id:
 	    		#print "GENE is, ", gene
 	    		indices = [d for d, x in enumerate(self.id) if x == gene]
-	    		print indices
+	    		#print indices
 	    		for index in indices:
 		    		#rel_prom_idx = self.id.index(gene) - 1
 		    		rel_prom_idx = index - 1
@@ -296,7 +407,7 @@ class design:
 		    		gene_idx = species.index(gene)
 		    		mat[gene_idx][prom_idx] = 1
 
-	    print "matrix for ", self.id, " = ", mat
+	    #print "matrix for ", self.id, " = ", mat
 	    sum_mat = sum_cols(mat)
 
 	    for n in species:
@@ -324,7 +435,7 @@ class design:
 	    #model = Matrix([odes[0]]+[odes[1]]+[odes[2]])
 	    model = Matrix([odes[0]]+[odes[1]])
 	    
-	    print params
+	    #print params
 
 	    # global global_params2
 	    # for x in params:
@@ -339,12 +450,12 @@ class design:
 		global sub_model
 
 		sub_model = self.model.subs(ground_truth_vals)
-		init_species = [1,1,1]
+		init_species = [10,1]
 		t_out = np.arange(0,25,1)
 		sim_out = odeint(odeint_model,init_species,t_out)
 		#print "SIMULATION of design ", des, ":"
-		g0_res, g1_res, g2_res = sim_out.T
-		print list(g0_res)
+		g0_res, g1_res = sim_out.T
+		#print list(g0_res)
 
 		self.char_data = ([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24],list(g0_res))
 		#design_name = str(self.id).strip('[]').strip(', ')
@@ -490,7 +601,7 @@ class MDP_node:
 		for item in sub_des_list:
 			#if item[1] == min_param_len:
 			#we know at least 50% of the params
-			print "perct known for next considered design = ", float(float(len(known_params))/float(len(item[0].params)))
+			#print "perct known for next considered design = ", float(float(len(known_params))/float(len(item[0].params)))
 			if float(float(len(known_params))/float(len(item[0].params))) >= 0.5:
 				successors.append(str(item[0].id))
 		
@@ -514,7 +625,7 @@ class MDP_node:
 
 
 
-		print "actions for state ", self. symb_param, " = ", actions
+		#print "actions for state ", self. symb_param, " = ", actions
 
 		return actions
 
@@ -615,7 +726,7 @@ class beluga_obj:
     	print "Num Designs in Space = ", len(design_dict)
     	print "Param space: ", self.param_space
     	#print "len of intersection of [p0,g0] and [p0,g1,p0,g0] params: ", len(set(design_dict["['p0', 'g0']"].params).intersection(set(design_dict["['p1', 'g0']"].params)))
-    	print "design p0,g1|p1,g0 model: ", design_dict["['p0', 'g1', 'p1', 'g0']"].model
+    	#print "design p0,g1|p1,g0 model: ", design_dict["['p0', 'g1', 'p1', 'g0']"].model
     	return design_dict
 
     def getTransitionsandProb(self,state,action):
@@ -640,7 +751,7 @@ class beluga_obj:
     	start_node.symb_param = dict(self.param_space) #copy all keys in global param list and put a 1 value next to it
     	for p_key, p in start_node.symb_param.iteritems():
     		start_node.symb_param.update({p_key: 1})
-    	print "Start node symb params = ", start_node.symb_param
+    	#print "Start node symb params = ", start_node.symb_param
     	#start_node.actions = {"['p0', 'g0']": [], "['p1', 'g0']": [], "['p2', 'g0']": []}
     	start_node.history.append("None")
     	start_element = ("S"+str(s_key), start_node)
@@ -659,14 +770,14 @@ class beluga_obj:
     		key, mdpnode = mdpelement[0], mdpelement[1]
     		mdp_dict.update({key: mdpnode})
     		print "\n\nMDP NODE = ", key
-    		print "actions before = ", mdpnode.actions
+    		#print "actions before = ", mdpnode.actions
     		
     		param_sum = 0
     		
     		for v1_key, val1 in mdpnode.symb_param.iteritems():
     			param_sum += val1
     		perct_unk = float(float(param_sum)/float(len(mdpnode.symb_param)))
-    		print "Percent unknown = ", perct_unk
+    		#print "Percent unknown = ", perct_unk
 
     		actions = mdpnode.getPossibleActions(self.design_space)
 
@@ -696,7 +807,7 @@ class beluga_obj:
     			actions[action].append((key,1-prob,(0,-1)))
     			mdpnode.actions = dict(actions)
     			new_element = ("S"+str(s_key), new_mdpnode)
-    			print "PUSHING ELEMENT", new_element[0], "TO QUEUE"
+    			#print "PUSHING ELEMENT", new_element[0], "TO QUEUE"
     			mdp_Q.push(new_element)
     					
     		print "actions after = ", mdpnode.actions
@@ -717,7 +828,7 @@ class beluga_obj:
     		if len(item.actions) > 0:
     			policy.update({key: item.actions.keys()[len(item.actions)-1]})
     	#Start with start of MDP, follow the policy until it terminates and store and return this policy.
-    	print policy
+    	#print policy
     	return policy
 
     def learn(self,curstate,nxtstate):
@@ -725,36 +836,145 @@ class beluga_obj:
     	for p, pranges in self.param_space.iteritems():
     		total_param_range += pranges[1] - pranges[0]
     	learn = -1 * float(float(total_param_range)/float(10*len(self.param_space)))
+    	print "learn val = ", learn
     	return learn
 
-    def goal_dist(self, action):
-    	print "action = ", action
+    def local_min(self,ys):
+    	return [y for i, y in enumerate(ys)
+            if ((i == 0) or (ys[i - 1] >= y))
+            and ((i == len(ys) - 1) or (y < ys[i+1]))]
+
+    def local_max(self,ys):
+    	return [y for i, y in enumerate(ys)
+            if ((i == 0) or (ys[i - 1] <= y))
+            and ((i == len(ys) - 1) or (y > ys[i+1]))]
+
+    def michelis_mentenz(self, x_vec, t, *args):
+    	global sim_model
+    	params = {"L00": args[0], "L01": args[1], "L10": args[2], "L11": args[3],
+    	 "K00": args[4], "K01": args[5], "K10": args[6], "K11": args[7]}
+    	sub_model = sim_model.subs(params)
+    	#print sub_model
+    	#sub_model = self.design_space["['p0', 'g1', 'p1', 'g0']"].model.subs(params)
+    	sub
+    	G0, G1 = symbols("G0, G1")
+    	temp_g0, temp_g1 = x_vec
+    	new_values = list(sub_model.subs({G0: temp_g0, G1: temp_g1}))
+    	# print "actual model = ", self.design_space["['p0', 'g0']"].model
+    	# print "model = ", sub_model
+    	# print "sub_model = ", temp_g0, temp_g1
+    	# print "the model = ", new_values
+    	return new_values
+
+
+    def goal_dist(self, action, iter_num):
+    	#print "action = ", action
     	global sub_model
+    	global sim_model
+    	global sims_total
     	num_sims = 10
     	num_accepted = 0
-    	epsilon = 10
+    	epsilon_start = 70
+    	sims_total = sims_total + 1
+    	if epsilon_start - (iter_num*10) < 10:
+    		epsilon = 10
+    	else:
+    		epsilon = epsilon_start - (iter_num*10)
 
+    	sim_model = self.design_space[action].model
+
+    	# print "\n\nIN GOAL DISTANCE. ACTION = ", action, ": "
+    	# print "Remember, Goal is = ", self.goal[2]
+    	print "\n\nCurrent EPSILON is = ", epsilon
+    	print "ACTION IS : ", action
+    	# print "And current design model is: ", sim_model
+    	print "Current knowledge is: ", self.param_space
+    	print "\n"
+
+    	######################### PURELY FOR DEBUG ##########################
+    	# action = "['p0', g0']"
+    	# for n in range(0,6):
+    	# 	if n == 0:
+
+
+    	
+
+    	############################ PREVIOUSLY #############################
     	for i in range(0, num_sims):
     		submat = {}
     		for param, prange in self.param_space.iteritems():
     			submat.update({str(param) : random.uniform(prange[0],prange[1])})
-    		print "submat ISSSS ---- ", submat
+    			# print param, type(param)
+    			# if str(param) == 'L00' or str(param) == 'K00' or str(param) == 'L10' or str(param) == 'K01':
+    			# 	#print "using known params"
+    			# 	submat.update({str(param) : self.testdata[str(param)]})
+    			# else:
+    			# 	submat.update({str(param) : random.uniform(prange[0],prange[1])})
+    		#print "Using submat: ", submat
     		sub_model = self.design_space[action].model.subs(submat)
-    		init_species = [1,1,1]
+    		init_species = [10,1]
     		t_out = np.arange(0,25,1)
-    		sim_out = odeint(odeint_model,init_species,t_out)
+    		# l00_p = 0
+    		# l01_p = 0
+    		# l10_p = 0
+    		# l11_p = 9.74
+    		# k00_p = 0
+    		# k01_p = 0
+    		# k10_p = 0
+    		# k11_p = 9.37
+
+    		# mm_params = (l00_p, l01_p, l10_p, l11_p, k00_p, k01_p, k10_p, k11_p)
+    		#Generate some synthetic data from the model
+    		#print t_out
+    		with stdout_redirected():
+    			#sim_out = odeint(self.michelis_mentenz,init_species,t_out, args = (mm_params))
+    			sim_out = odeint(odeint_model,init_species,t_out)
+    			g0_res, g1_res = sim_out.T
+    			#print "here", g0_res
     		#print "SIMULATION of design ", des, ":"
-    		g0_res, g1_res, g2_res = sim_out.T
     		#dist = 0
-    		dist = distance.euclidean(np.array(g0_res), np.array(self.goal[1]))
-    		if dist <= 10:
+    		dist = distance.euclidean(np.array(g0_res), np.array(self.goal[2]))
+    		smooth_sim = savgol_filter(g0_res, 5, 3)
+    		#print "smoothed sim = ", smooth_sim
+    		#print "looking for minima ... "
+    		num_maxi = 0
+    		#minima = np.r_[True, smooth_sim[1:] < smooth_sim[:-1] + 1] & np.r_[smooth_sim[:-1] < smooth_sim[1:] + 1, True]
+    		#print "minimia = ", minima
+    		# for elem in minima:
+    		# 	if elem ==True:
+    		# 		num_minima += 1
+    		# if num_minima !=1:
+    		# 	dist += 20
+    		# 	print "Not a pulse!"
+    		# if i > 30:
+    		# 	print "\nSIM = ", g0_res
+    		# 	print "DISTANCE = ", dist
+
+    		global_min = min(smooth_sim)
+    		local_max = self.local_max(smooth_sim)
+
+    		for maxi in local_max:
+    			if maxi > (global_min + 1):
+    				num_maxi += 1
+    		if num_maxi != 2:
+    			dist += 10
+    		else:
+    			print "\nPulse!"
+    			#print "SIM = ", g0_res
+    			# print "DISTANCE = ", dist
+    			# print "global min ", min(smooth_sim)
+    			# print "local max ", self.local_max(smooth_sim)
+
+    		if dist <= epsilon:
     			num_accepted = num_accepted + 1
-    		# print "SIM RESULTS: ", list(g0_res)
-    		# print "GOAL: ", self.goal
-    		# print "Distance = ", dist
-    	print "goal_dist = ", float(float(num_accepted)/float(num_sims))
-    	print "simulating model = ", self.design_space[action].model
-    	return 10
+    		print "SIM RESULTS: ", list(g0_res)
+    		print "GOAL: ", self.goal
+    		print "Distance = ", dist
+    	goal_d = float(float(num_accepted)/float(num_sims))
+    	print "\nnum_accepted = ", num_accepted, " ... num sims = ", num_sims
+    	print "Goal_dist = ", float(float(num_accepted)/float(num_sims)), " for action ", action
+    	#print "simulating model = ", self.design_space[action].model
+    	return goal_d
 
     def getTerminalVal(self, state, iter_num):
     	# if self.belugaMDP[state].terminal_reward[1]!=iter_num:
@@ -768,9 +988,9 @@ class beluga_obj:
     		return self.MDP_rewards[action][1]
 
     	if action not in self.MDP_rewards:
-    		self.MDP_rewards.update({action: (iter_num, e**(iter_num+2) * self.goal_dist(action))})
+    		self.MDP_rewards.update({action: (iter_num, math.exp(iter_num+2) * self.goal_dist(action,iter_num))})
     	elif self.MDP_rewards[action][0] != iter_num:
-    		self.MDP_rewards.update({action: (iter_num, e**(iter_num+2) * self.goal_dist(action))})
+    		self.MDP_rewards.update({action: (iter_num, math.exp(iter_num+2) * self.goal_dist(action,iter_num))})
     	
     	return self.MDP_rewards[action][1]
     	#return terminal_reward[0]
@@ -798,9 +1018,9 @@ class beluga_obj:
     		return self.MDP_rewards[action][1]
 
     	if action not in self.MDP_rewards:
-    		self.MDP_rewards.update({action: (iter_num, self.learn(cur_state,next_state) + e**iter_num * self.goal_dist(action))})
+    		self.MDP_rewards.update({action: (iter_num, self.learn(cur_state,next_state) + math.exp(iter_num) * self.goal_dist(action,iter_num))})
     	elif self.MDP_rewards[action][0] != iter_num:
-    		self.MDP_rewards.update({action: (iter_num, self.learn(cur_state,next_state) + e**iter_num * self.goal_dist(action))})
+    		self.MDP_rewards.update({action: (iter_num, self.learn(cur_state,next_state) + math.exp(iter_num) * self.goal_dist(action,iter_num))})
     	
     	return self.MDP_rewards[action][1]
 
@@ -833,6 +1053,7 @@ class beluga_obj:
     			for s, action in cur_policy.iteritems():
     				values[s] = vVal_dict[s]
     		#print "Values of policy ", k , " - ", values, "\n\n"
+    		#print "\nIn Find Policy - improvement: "
     		#policy improvement:
     		new_policy = dict(cur_policy)
     		#for each state in the cur_policy
@@ -847,7 +1068,10 @@ class beluga_obj:
     					nextstate = t[0]
     					if len(self.belugaMDP[nextstate].actions) < 1:
     						values[nextstate] = int(self.getTerminalVal(nextstate, cur_round))
-    					val += int(t_prob*(self.getReward(s, action, nextstate, cur_round)) + discount*values[nextstate])
+    					# print "mdp state is ", s
+    					# print "action is ", action
+    					# print "a is ", a
+    					val += int(t_prob*(self.getReward(s, a, nextstate, cur_round)) + discount*values[nextstate])
 
     				#print "\n\nvalue for state ", s, " action ", a, " = ", val
     				#vVal_dict[s] = qVal
@@ -868,43 +1092,290 @@ class beluga_obj:
     			cur_policy = dict(new_policy)
     			#print "Policy improved to: ", cur_policy
     	#print "DESE VALUES for the first policy, iteration ", k , " - ", values
+    	print "CURRENT VALUES OF STATES:  ", values
     	return new_policy
 
+    # def michelis_menten(self, x_vec, t, *args):
+    # 	global sub_model
+    # 	params = {"L00": args[0], "K00": args[1]}
+    # 	sub_model = self.design_space["['p0', 'g0']"].model.subs(params)
+    # 	G0, G1, G2 = symbols("G0, G1, G2")
+    # 	temp_g0, temp_g1 = x_vec
+    # 	new_values = list(sub_model.subs({G0: temp_g0, G1: temp_g1}))
+    # 	print "actual model = ", self.design_space["['p0', 'g0']"].model
+    # 	print "model = ", sub_model
+    # 	print "sub_model = ", temp_g0, temp_g1
+    # 	print "the model = ", new_values
+    # 	return new_values
+
+    def mylnprior(self, theta):
+    	L00, K00 = theta
+    	if 0.0 < L00 < 10.0 and 0.0 < K00 < 10.0:
+        	return 0.0
+    	return -np.inf
+
+    def mylnlike(self, theta, x, g0):
+    	#L00, K00 = theta
+    	init_species = [10,1]
+    	t_out = np.arange(0,25,1)
+    	p = tuple(theta)
+    	print "chosen params: ", p
+    	params = p[0], p[1]
+    	#print "params again: ", params
+    	sim_P = odeint(self.michelis_menten, init_species, t_out, args=params)
+    	#res = distance.euclidean(np.array(sim_P.T[0]), np.array(g0))
+    	res = np.sum((np.array(sim_P.T[0]) - np.array(g0))**2)
+    	print "sim 0 = ", sim_P.T[0]
+    	print "sim = ", sim_P.T
+    	print "chardata = ", g0
+    	print "Res = ", res
+    	return res
+    	#return sim_P.T[0] - g0
+    	# model = m * x + b
+    	# inv_sigma2 = 1.0/(yerr**2 + model**2*np.exp(2*lnf))
+    	#return -0.5*(np.sum((y-model)**2*inv_sigma2 - np.log(inv_sigma2)))
+
+    def mylnprob(self, theta, x, g0):
+    	lp = self.mylnprior(theta)
+    	if not np.isfinite(lp):
+        	return -np.inf
+    	return lp + self.mylnlike(theta, x, g0)
+
+    def execute_policy1(self, policy, cur_state, cur_state_name):
+    	np.random.seed(123)
+    	#action = policy[cur_state_name]
+    	action = "['p0', 'g0']"
+
+    	##################### THE INTERNET EXAMPLE ##########################
+    	#Choose the "true" parameters.
+    	m_true = -0.9594
+    	b_true = 4.294
+    	f_true = 0.534
+    	#Generate some synthetic data from the model
+    	N = 50
+    	x = np.sort(10*np.random.rand(N))
+    	yerr = 0.1+0.5*np.random.rand(N)
+    	y = m_true*x+b_true
+    	y += np.abs(f_true*y) * np.random.randn(N)
+    	y += yerr * np.random.randn(N)
+    	print "this is the y : ", y
+    	print "type : ", type(y)
+    	
+    	# global sub_model
+    	# sub_model = self.design_space[action].model.subs(self.testdata)
+    	# init_species = [1,1,1]
+    	# t_out = np.arange(0,25,1)
+    	# sim_out = odeint(odeint_model,init_species,t_out)
+    	# #print "SIMULATION of design ", des, ":"
+    	# g0_res, g1_res, g2_res = sim_out.T
+    	print "(x,y,yerr)", (x,y,yerr)
+    	print "type : ", type((x,y,yerr)[1])
+    	# # Find the maximum likelihood value.
+    	chi2 = lambda *args: -2 * lnlike(*args)
+    	result = op.minimize(chi2, [m_true, b_true, np.log(f_true)], args=(x, y, yerr))
+    	# Set up the sampler.
+    	ndim, nwalkers = 3, 100
+    	pos = [result["x"] + 1e-4*np.random.randn(ndim) for i in range(nwalkers)]
+    	sampler = emcee.EnsembleSampler(nwalkers, ndim, lnprob, args=(x, y, yerr))
+    	# Clear and run the production chain.
+    	print("Running MCMC...")
+    	sampler.run_mcmc(pos, 500, rstate0=np.random.get_state())
+    	print("Done.")
+    	# Compute the quantiles.
+    	burnin = 50
+    	samples = sampler.chain[:, burnin:, :].reshape((-1, ndim))
+    	samples[:, 2] = np.exp(samples[:, 2])
+    	m_mcmc, b_mcmc, f_mcmc = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]),zip(*np.percentile(samples, [16, 50, 84], axis=0)))
+    	print("""MCMC result:
+    		m = {0[0]} +{0[1]} -{0[2]} (truth: {1})
+    		b = {2[0]} +{2[1]} -{2[2]} (truth: {3})
+    		f = {4[0]} +{4[1]} -{4[2]} (truth: {5})
+    	""".format(m_mcmc, m_true, b_mcmc, b_true, f_mcmc, f_true))
+    	# #do param inference for design using char data
+    	# #update self.param_space
+    	# print "\n Doing experiment ", action, ": "
+    	# print list(g0_res)
+
+    	##################### THE PO,GO EXAMPLE ##########################
+    	#Choose the "true" parameters.
+    	l00_p = 2.256
+    	k00_p = 5.658
+    	mm_params = (l00_p, k00_p)
+    	#Generate some synthetic data from the model
+    	global sub_model
+    	init_species = [10,1]
+    	t_out = np.arange(0,25,1)
+    	print "Params - ", self.design_space["['p0', 'g0']"].params
+    	sim_out = odeint(self.michelis_menten,init_species,t_out, args = (mm_params))
+    	g0_res, g1_res = sim_out.T
+    	print g0_res
+    	#create experimental data by making true sim noisy
+    	exp_g0_res = g0_res + np.random.randn(len(g0_res))*0.5
+    	print "args that im screwing up somehow ", exp_g0_res
+    	print "type = ", type(exp_g0_res)
+    	# # Find the maximum likelihood value.
+    	xdata = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
+    	mychi2 = lambda *args: -2 * self.mylnlike(*args)
+    	result = op.minimize(mychi2, [l00_p, k00_p], args=(xdata,exp_g0_res))
+    	# Set up the sampler.
+    	ndim, nwalkers = 2, 10
+    	pos = [result["x"] + 1e-4*np.random.randn(ndim) for i in range(nwalkers)]
+    	sampler = emcee.EnsembleSampler(nwalkers, ndim, self.mylnprob, args=(xdata,exp_g0_res))
+    	# Clear and run the production chain.
+    	print("Running MCMC...")
+    	sampler.run_mcmc(pos, 10, rstate0=np.random.get_state())
+    	print("Done.")
+    	
+    	return cur_state
+
+    def notmy_michelis_menten(self, y, t, *args):
+    	Vmax = args[0]
+    	km = args[1]
+    	St = args[2]
+    	P = y[0]
+    	S = St-P
+
+    	dP = Vmax * (S / (S+km))
+    	return dP
+
     def execute_policy(self, policy, cur_state, cur_state_name):
-    	print cur_state
-    	action = policy[cur_state_name]
-    	#do param inference for design using char data
-    	#update self.param_space
+    	#print cur_state
+    	#action = policy[cur_state_name]
+    	action = "['p0', 'g0']"
+    	np.random.seed(123)
+    	print "CURVE FIT TEST:"
+    	xdata = np.linspace(0, 4, 50)
+    	y = func(xdata, 2.5, 1.3, 0.5)
+    	ydata = y + 0.2 * np.random.normal(size=len(xdata))
+    	popt, pcov = curve_fit(func, xdata, ydata)
+    	print popt, pcov
+
+    	print "\nCURVE FIT ODE TEST"
+    	xdata = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
     	global sub_model
     	sub_model = self.design_space[action].model.subs(self.testdata)
-    	init_species = [1,1,1]
+    	init_species = [10,1]
     	t_out = np.arange(0,25,1)
     	sim_out = odeint(odeint_model,init_species,t_out)
     	#print "SIMULATION of design ", des, ":"
-    	g0_res, g1_res, g2_res = sim_out.T
-    	print "\n Doing experiment ", action, ": "
-    	print list(g0_res)
-    	return cur_state
+    	g0_res, g1_res = sim_out.T
+    	print g0_res
+    	print "is this the same? ", sim_out.T[0]
+    	#y = g0_res
+    	# ydata = y + 0.2 * np.random.normal(size=len(xdata))
+    	# popt, pcov = curve_fit(odeint(odeint_model,init_species,t_out).T[0], xdata, ydata)
+    	# print popt, pcov
+    	
+    	print "\nNEW ODE WITH PARAMS AS ARGS"
+    	global sub_model
+    	#sub_model = self.design_space[action].model.subs(self.testdata)
+    	init_species = [10,1]
+    	t_out = np.arange(0,25,1)
+    	l00_p = 2.256
+    	k00_p = 5.658
+    	mm_params = (l00_p, k00_p)
+    	print "Params - ", self.design_space["['p0', 'g0']"].params
+    	sim_out = odeint(self.michelis_menten,init_species,t_out, args = (mm_params))
+    	#print "SIMULATION of design ", des, ":"
+    	g0_res, g1_res = sim_out.T
+    	print g0_res
+    	#create experimental data by making true sim noisy
+    	exp_g0_res = g0_res + np.random.randn(len(g0_res))*0.5
+    	#ydata = g0_res + np.random.randn(len(g0_res))*0.5
+    	#exp_g0_res = exp_g0_res[::5]
+    	
+    	def residuals(p):
+    		p = tuple(p)
+    		print "Params chosen = ", p
+    		print "Simulating ..."
+    		sim_P = odeint(self.michelis_menten, init_species,t_out, args=p) #.flatten()
+    		res = sim_P.T[0] - exp_g0_res
+    		print "sim res = ", sim_P.T[0]
+    		print "chardata = ", exp_g0_res
+    		print "residual results = ", res
+    		#res = distance.euclidean(np.array(sim_P.T[0]), np.array(exp_g0_res))
+    		return res
+    	initial_guess = [2.0,5.0]
+    	fitted_params = op.minimize(residuals, initial_guess, method = 'SLSQP', bounds = [(0,10),(0,10)])[0]
+    	#fitted_params = leastsq(residuals, initial_guess)[0]
+    	#x_3d = np.array([[xdata],[ydata]])
+    	#popt, pcov = curve_fit(np.array(odeint(self.michelis_menten, init_species, t_out).T[0]), x_3d, x_3d[1,:], initial_guess)
+    	print "Fitted Params = ", fitted_params
 
+
+    	# print "Example ODE fitting problem:"
+    	# Vmax = 1
+    	# km = 3
+    	# St = 10
+    	# notmymm_params = (Vmax, km, St)
+    	# #inits
+    	# P_0 = 0
+    	# n_steps = 100
+    	# t = np.linspace(0,50,n_steps)
+
+    	# num_P = odeint(self.notmy_michelis_menten, P_0, t, args = (notmymm_params))
+
+    	# #create exp data
+    	# exp_P = num_P + np.random.randn(len(num_P)) * 0.5
+    	# print "This is expP ", exp_P
+    	# #exp_P = exp_P[::5]
+    	# #print "This is expP[::5] ", exp_P
+
+    	# def residuals2(p):
+    	# 	p = tuple(p)
+    	# 	sim_P = odeint(self.notmy_michelis_menten, P_0, t, args = p).flatten()
+    	# 	#res = sim_P[::5] - exp_P
+    	# 	res = sim_P - exp_P
+    	# 	return res.flatten()
+
+    	# initial_g = [1,2,5]
+    	# fitted_P = leastsq(residuals2, initial_g)[0]
+    	# print "FITTETED: ", fitted_P
+    	return cur_state
+    def execute_fake_policy(self, policy, cur_state_name):
+    	action = policy[cur_state_name]
+    	print "BUILDING/TESTING DESIGN: ", action
+    	#assume build/test/and fit just succeeds ... because i couldnt get the param fitting to work
+    	cur_design_params = self.design_space[action].params
+    	print cur_design_params
+    	for param in cur_design_params:
+    		pvalue = self.testdata[str(param)]
+    		low = pvalue - random.uniform(0,2)
+    		high = pvalue + random.uniform(0,2)
+    		if low < 0:
+    			low = 0
+    		if high < 0:
+    			high = 0
+    		self.param_space.update({param: [low, high]})
+    		#print "new param_space = ", self.param_space
+    	next_state = self.belugaMDP[cur_state_name].actions[action][0][0]
+    	#for t in self.belugaMDP[cur_state].actions[action]:
+    	return next_state
     def search(self):
+    	global sims_total
     	print "IN SEARCH - here's the mdp:", self.belugaMDP
-    	cur_state = self.belugaMDP['S0']
+    	#cur_state = self.belugaMDP['S0']
     	cur_state_name = 'S0'
     	policy_dict = self.initPolicy() #... for each state in the full MDP state space, choose the simplest action
     	#print "Init policy is: ", policy_dict
     	alg_round = 1
     	#while !cur_state.isTerminal(): ... while terminal state not experimentally reached:
-    	#while len(cur_state.actions) > 0:
-    	policy_dict = self.findPolicy(policy_dict, alg_round) #... find optimal policy
-    	print "current optimal policy ", policy_dict
-    	print "\ntest data = ", self.testdata
-    	print "\nparam space = ", self.param_space
-    			#evaluate current policy
-    				#compute values (using transition and reward) for each state following current policy
-    			#improve policy
-    	next_state = self.execute_policy(policy_dict, cur_state, cur_state_name) #... do one step of current policy
-    	####X -update learned global parameters for next round of sims (should be done in execute policy)
-    	####X -update rewards
-    	#cur_state = next_state #... make current step new start node
-    	#alg_round = alg_round + 1
+    	while len(self.belugaMDP[cur_state_name].actions) > 0:
+	    	policy_dict = self.findPolicy(policy_dict, alg_round) #... find optimal policy
+	    	print "current optimal policy ", policy_dict
+	    	#print "\ntest data = ", self.testdata
+	    	#print "\nparam space = ", self.param_space
+	    			#evaluate current policy
+	    				#compute values (using transition and reward) for each state following current policy
+	    			#improve policy
+	    	next_state_name = self.execute_fake_policy(policy_dict, cur_state_name) #... do one step of current policy
+	    	####X -update learned global parameters for next round of sims (should be done in execute policy)
+	    	####X -update rewards
+	    	cur_state_name = next_state_name #... make current step new start node
+	    	print "Next state = ", cur_state_name
+	    	alg_round = alg_round + 1
+	    	print "Total number of sims = ", sims_total
+    	#print "FINAL DESIGN: ", action, self.MDP_rewards[action]
+    	#for state in self.belugaMDP:
+    	#print "a failed design: ['p0', 'g1', 'p1', 'g0'] ", self.MDP_rewards["['p0', 'g1', 'p1', 'g0']"]
     	return 0
