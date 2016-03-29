@@ -16,6 +16,9 @@ from scipy.integrate import odeint
 from scipy.spatial import distance
 from scipy.signal import savgol_filter
 from matplotlib.ticker import MaxNLocator
+from SALib.sample import saltelli
+from SALib.analyze import sobol
+from SALib.test_functions import Ishigami
 
 sub_model = []
 sim_model = []
@@ -872,7 +875,7 @@ class beluga_obj:
     	global sub_model
     	global sim_model
     	global sims_total
-    	num_sims = 10
+    	num_sims = 30
     	num_accepted = 0
     	epsilon_start = 70
     	sims_total = sims_total + 1
@@ -889,29 +892,45 @@ class beluga_obj:
     	print "ACTION IS : ", action
     	# print "And current design model is: ", sim_model
     	print "Current knowledge is: ", self.param_space
-    	print "\n"
+    	#print "\n"
 
-    	######################### PURELY FOR DEBUG ##########################
-    	# action = "['p0', g0']"
-    	# for n in range(0,6):
-    	# 	if n == 0:
+    	names_arr = []
+    	bound_arr = []
+    	problem = {'num_vars': 0, 'names': [], 'bounds': []}
+
+    	problem.update({'num_vars': len(self.design_space[action].params)})
+    	for par in self.design_space[action].params:
+    		names_arr.append(str(par))
+    		bound_arr.append(self.param_space[par])
+    	problem.update({'names': names_arr})
+    	problem.update({'bounds': bound_arr})
+
+    	Y = np.empty(num_sims)
+
+    	#print "Problem Is: ", problem
+
+    	param_values = saltelli.sample(problem, 10, calc_second_order=False)
+    	#print "Param values = ", len(param_values), param_values
+
+    	Y = np.empty([param_values.shape[0]])
+    	#print "Y is now ", len(Y), Y
+    	#print "working on submat ", problem['names'][0], param_values[0][0]
+    	num_sims = len(param_values)
 
 
-    	
+    	#####
+    	#Sensitivity analysis needs to be folded in here somehow. 
 
     	############################ PREVIOUSLY #############################
     	for i in range(0, num_sims):
     		submat = {}
-    		for param, prange in self.param_space.iteritems():
-    			submat.update({str(param) : random.uniform(prange[0],prange[1])})
-    			# print param, type(param)
-    			# if str(param) == 'L00' or str(param) == 'K00' or str(param) == 'L10' or str(param) == 'K01':
-    			# 	#print "using known params"
-    			# 	submat.update({str(param) : self.testdata[str(param)]})
-    			# else:
-    			# 	submat.update({str(param) : random.uniform(prange[0],prange[1])})
-    		#print "Using submat: ", submat
+    		#for param, prange in self.param_space.iteritems():
+    		for j in range(0, len(param_values[i])):
+    			#submat.update({str(param) : random.uniform(prange[0],prange[1])})
+    			submat.update({str(problem['names'][j]) : param_values[i][j]})
+    	
     		sub_model = self.design_space[action].model.subs(submat)
+    		#print "current submat: ", submat
     		init_species = [10,1]
     		t_out = np.arange(0,25,1)
     		# l00_p = 0
@@ -925,31 +944,17 @@ class beluga_obj:
 
     		# mm_params = (l00_p, l01_p, l10_p, l11_p, k00_p, k01_p, k10_p, k11_p)
     		#Generate some synthetic data from the model
-    		#print t_out
     		with stdout_redirected():
     			#sim_out = odeint(self.michelis_mentenz,init_species,t_out, args = (mm_params))
     			sim_out = odeint(odeint_model,init_species,t_out)
     			g0_res, g1_res = sim_out.T
-    			#print "here", g0_res
-    		#print "SIMULATION of design ", des, ":"
-    		#dist = 0
     		dist = distance.euclidean(np.array(g0_res), np.array(self.goal[2]))
-    		smooth_sim = savgol_filter(g0_res, 5, 3)
-    		#print "smoothed sim = ", smooth_sim
-    		#print "looking for minima ... "
-    		num_maxi = 0
-    		#minima = np.r_[True, smooth_sim[1:] < smooth_sim[:-1] + 1] & np.r_[smooth_sim[:-1] < smooth_sim[1:] + 1, True]
-    		#print "minimia = ", minima
-    		# for elem in minima:
-    		# 	if elem ==True:
-    		# 		num_minima += 1
-    		# if num_minima !=1:
-    		# 	dist += 20
-    		# 	print "Not a pulse!"
-    		# if i > 30:
-    		# 	print "\nSIM = ", g0_res
-    		# 	print "DISTANCE = ", dist
 
+    		#np.append(Y,dist)
+    		Y[i] = dist
+
+    		smooth_sim = savgol_filter(g0_res, 5, 3)
+    		num_maxi = 0
     		global_min = min(smooth_sim)
     		local_max = self.local_max(smooth_sim)
 
@@ -958,27 +963,28 @@ class beluga_obj:
     				num_maxi += 1
     		if num_maxi != 2:
     			dist += 10
-    		else:
-    			print "\nPulse!"
-    			#print "SIM = ", g0_res
-    			# print "DISTANCE = ", dist
-    			# print "global min ", min(smooth_sim)
-    			# print "local max ", self.local_max(smooth_sim)
+    		#else:
+    			#print "\nPulse!"
 
     		if dist <= epsilon:
     			num_accepted = num_accepted + 1
-    		print "SIM RESULTS: ", list(g0_res)
-    		print "GOAL: ", self.goal
-    		print "Distance = ", dist
+    		# print "SIM RESULTS: ", list(g0_res)
+    		# print "GOAL: ", self.goal
+    		# print "Distance = ", dist
     	goal_d = float(float(num_accepted)/float(num_sims))
     	print "\nnum_accepted = ", num_accepted, " ... num sims = ", num_sims
     	print "Goal_dist = ", float(float(num_accepted)/float(num_sims)), " for action ", action
-    	#print "simulating model = ", self.design_space[action].model
+    	#print "Y size = ", Y.size
+    	#print "num vars (D) = ", problem['num_vars']
+    	#print "Y % (D+2) = ", Y.size % (problem['num_vars'] + 2)
+    	Si = sobol.analyze(problem, Y, calc_second_order=False, print_to_console=False)
+    	# print "\nDoing param Sensitivity analysis"
+    	# print problem['names']
+    	# print Si['S1']
+    	
     	return goal_d
 
     def getTerminalVal(self, state, iter_num):
-    	# if self.belugaMDP[state].terminal_reward[1]!=iter_num:
-    	# 	terminal_reward = (self.goal_dist(self.belugaMDP[state].history[-1]), iter_num)
     	action = self.belugaMDP[state].history[-1]
     	if iter_num == 1 :
     		if action not in self.MDP_rewards:
@@ -993,7 +999,6 @@ class beluga_obj:
     		self.MDP_rewards.update({action: (iter_num, math.exp(iter_num+2) * self.goal_dist(action,iter_num))})
     	
     	return self.MDP_rewards[action][1]
-    	#return terminal_reward[0]
 
     def getReward(self, cur_state, action, next_state, iter_num):
     	"""
@@ -1068,29 +1073,21 @@ class beluga_obj:
     					nextstate = t[0]
     					if len(self.belugaMDP[nextstate].actions) < 1:
     						values[nextstate] = int(self.getTerminalVal(nextstate, cur_round))
-    					# print "mdp state is ", s
-    					# print "action is ", action
-    					# print "a is ", a
     					val += int(t_prob*(self.getReward(s, a, nextstate, cur_round)) + discount*values[nextstate])
 
-    				#print "\n\nvalue for state ", s, " action ", a, " = ", val
-    				#vVal_dict[s] = qVal
     				if val > values[s]:
     					new_policy.update({ s: a})
-    					#print "new_policy is", new_policy
-    		#temporary
-    		#print "CURRENT POLICY = ", cur_policy
-    		#print "NEW POLICY ", new_policy
+
     		mismatch = 0
     		for s, curaction in cur_policy.iteritems():
     			if new_policy[s] != cur_policy[s]:
     				mismatch = mismatch + 1
-    		#print "MISTMATCH ", mismatch
+
     		if mismatch == 0:
     			unchanged = True
     		else:
     			cur_policy = dict(new_policy)
-    			#print "Policy improved to: ", cur_policy
+
     	#print "DESE VALUES for the first policy, iteration ", k , " - ", values
     	print "CURRENT VALUES OF STATES:  ", values
     	return new_policy
@@ -1130,11 +1127,7 @@ class beluga_obj:
     	print "chardata = ", g0
     	print "Res = ", res
     	return res
-    	#return sim_P.T[0] - g0
-    	# model = m * x + b
-    	# inv_sigma2 = 1.0/(yerr**2 + model**2*np.exp(2*lnf))
-    	#return -0.5*(np.sum((y-model)**2*inv_sigma2 - np.log(inv_sigma2)))
-
+    	
     def mylnprob(self, theta, x, g0):
     	lp = self.mylnprior(theta)
     	if not np.isfinite(lp):
@@ -1267,7 +1260,6 @@ class beluga_obj:
     	# print popt, pcov
     	
     	print "\nNEW ODE WITH PARAMS AS ARGS"
-    	global sub_model
     	#sub_model = self.design_space[action].model.subs(self.testdata)
     	init_species = [10,1]
     	t_out = np.arange(0,25,1)
@@ -1332,9 +1324,12 @@ class beluga_obj:
     	# fitted_P = leastsq(residuals2, initial_g)[0]
     	# print "FITTETED: ", fitted_P
     	return cur_state
+
     def execute_fake_policy(self, policy, cur_state_name):
     	action = policy[cur_state_name]
+    	print "\n\n========================================="
     	print "BUILDING/TESTING DESIGN: ", action
+    	print "========================================="
     	#assume build/test/and fit just succeeds ... because i couldnt get the param fitting to work
     	cur_design_params = self.design_space[action].params
     	print cur_design_params
@@ -1351,6 +1346,22 @@ class beluga_obj:
     	next_state = self.belugaMDP[cur_state_name].actions[action][0][0]
     	#for t in self.belugaMDP[cur_state].actions[action]:
     	return next_state
+    def updatePolicy(self, state, policy):
+    	new_policy = {}
+    	Q = util.Queue()
+    	if len(self.belugaMDP[state].actions) != 0:
+    		Q.push(state)
+
+    	while Q.isEmpty()==0:
+    		s = Q.pop()
+    		print "in update policy: ", self.belugaMDP[s].actions 
+    		for a, T in self.belugaMDP[s].actions.iteritems():
+    			if len(self.belugaMDP[T[0][0]].actions) != 0:
+    				Q.push(T[0][0])
+    		new_policy.update({s: policy[s]})
+
+    	return new_policy
+
     def search(self):
     	global sims_total
     	print "IN SEARCH - here's the mdp:", self.belugaMDP
@@ -1373,6 +1384,8 @@ class beluga_obj:
 	    	####X -update rewards
 	    	cur_state_name = next_state_name #... make current step new start node
 	    	print "Next state = ", cur_state_name
+	    	policy_dict = self.updatePolicy(cur_state_name, policy_dict)
+	    	print "Policy is = ", policy_dict
 	    	alg_round = alg_round + 1
 	    	print "Total number of sims = ", sims_total
     	#print "FINAL DESIGN: ", action, self.MDP_rewards[action]
