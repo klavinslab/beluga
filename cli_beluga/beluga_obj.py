@@ -9,6 +9,7 @@ import util
 import random
 import math
 import matplotlib.pyplot as pl
+from matplotlib.pyplot import cm
 import scipy.optimize as op
 from scipy.optimize import curve_fit
 from scipy.optimize import leastsq
@@ -19,6 +20,13 @@ from matplotlib.ticker import MaxNLocator
 from SALib.sample import saltelli
 from SALib.analyze import sobol
 from SALib.test_functions import Ishigami
+from IPython.core.pylabtools import figsize
+import scipy.stats as stats
+import pymc as pm
+import pylab as P
+
+figsize(11, 9)
+
 
 sub_model = []
 sim_model = []
@@ -90,6 +98,8 @@ def odeint_model(x_vec,t):
 	global sub_model
 	G0, G1, G2 = symbols("G0, G1, G2")
 	temp_g0, temp_g1 = x_vec
+	#print "This is the SUBMODEL in ode int fcn: ", sub_model
+	#print "and this is temp_g0 and temp_g1 ", temp_g0, temp_g1
 	new_values = list(sub_model.subs({G0: temp_g0, G1: temp_g1}))
 	#print "new values", new_values
 	return new_values
@@ -875,7 +885,7 @@ class beluga_obj:
     	global sub_model
     	global sim_model
     	global sims_total
-    	num_sims = 30
+    	num_sims = 100
     	num_accepted = 0
     	epsilon_start = 70
     	sims_total = sims_total + 1
@@ -915,7 +925,8 @@ class beluga_obj:
     	Y = np.empty([param_values.shape[0]])
     	#print "Y is now ", len(Y), Y
     	#print "working on submat ", problem['names'][0], param_values[0][0]
-    	num_sims = len(param_values)
+    	#num_sims = len(param_values)
+    	sim_traj = []
 
 
     	#####
@@ -924,10 +935,10 @@ class beluga_obj:
     	############################ PREVIOUSLY #############################
     	for i in range(0, num_sims):
     		submat = {}
-    		#for param, prange in self.param_space.iteritems():
-    		for j in range(0, len(param_values[i])):
-    			#submat.update({str(param) : random.uniform(prange[0],prange[1])})
-    			submat.update({str(problem['names'][j]) : param_values[i][j]})
+    		for param, prange in self.param_space.iteritems():
+    		# for j in range(0, len(param_values[i])):
+    			submat.update({str(param) : random.uniform(prange[0],prange[1])})
+    			# submat.update({str(problem['names'][j]) : param_values[i][j]})
     	
     		sub_model = self.design_space[action].model.subs(submat)
     		#print "current submat: ", submat
@@ -948,6 +959,7 @@ class beluga_obj:
     			#sim_out = odeint(self.michelis_mentenz,init_species,t_out, args = (mm_params))
     			sim_out = odeint(odeint_model,init_species,t_out)
     			g0_res, g1_res = sim_out.T
+    		sim_traj.append(g0_res)
     		dist = distance.euclidean(np.array(g0_res), np.array(self.goal[2]))
 
     		#np.append(Y,dist)
@@ -978,6 +990,15 @@ class beluga_obj:
     	#print "num vars (D) = ", problem['num_vars']
     	#print "Y % (D+2) = ", Y.size % (problem['num_vars'] + 2)
     	Si = sobol.analyze(problem, Y, calc_second_order=False, print_to_console=False)
+
+    	n = num_sims
+    	color=iter(cm.rainbow(np.linspace(0,1,n)))
+    	for i in range(n):
+    		c = next(color)
+    		pl.plot(t_out,sim_traj[i], c=c)
+    	pl.plot(t_out, np.array(self.goal[2]),'b--')
+    	pl.savefig("goal_dist_traj"+ str(iter_num)+".png")
+
     	# print "\nDoing param Sensitivity analysis"
     	# print problem['names']
     	# print Si['S1']
@@ -1362,6 +1383,192 @@ class beluga_obj:
 
     	return new_policy
 
+    def bayes_model_inf(self, action):
+    	for par in self.design_space[action].params:
+    		if str(par) != "L11" and str(par)!="K11":
+    			self.param_space.update({par: [0, 0.01]})
+    	#print "Param Space before optimizing: ", self.param_space
+    	# self.goal_dist(action, 3)
+    	for par in self.design_space[action].params:
+    		if str(par) == "L11":
+    			self.param_space.update({par: [8.0,10.0]})
+    			#self.param_space.update({par: [min(l_11_samples), max(l_11_samples)]})
+    		if str(par) == "K11":
+    			self.param_space.update({par: [7.0,10.0]})
+    			#self.param_space.update({par: [min(k_11_samples), max(k_11_samples)]})
+    	print "Param Space after optimizing: ", self.param_space
+
+    	self.goal_dist(action, 6)
+    	#####generating char data for p0g0#######
+    	global sub_model
+    	# init_species = [10,1]
+    	# #action = "['p0', 'g0']"
+    	# tout = np.arange(0,25,1)
+    	submat = {}
+    	
+    	# for par in self.design_space[action].params:
+    	# 	submat.update({str(par): self.testdata[str(par)]})
+    	# # submat.update({"L00" : 0})
+    	# # submat.update({"K00" : 0})
+    	# sub_model = self.design_space[action].model.subs(submat)
+    	# sim_out = odeint(odeint_model,init_species,tout)
+    	# g0_res, g1_res = sim_out.T
+    	# #exp_g0_res = g0_res + np.random.randn(len(g0_res))*0.5
+    	# count_data = np.array(g0_res)
+    	# n = 2
+    	# color=iter(cm.rainbow(np.linspace(0,1,n)))
+    	# c=next(color)
+    	# plt.plot(x,y,c=c)
+    	
+    	count_data = np.array(self.goal[2])
+    	print "submat is ", submat
+    	# print "model is ", sub_model
+    	print "Fitting to Data = ", count_data
+    	
+    	n_count_data = len(count_data)
+    	# joke_arr = [1,2,3,4,5,4,3,2,1,2,3,4,5,4,3,2,1,2,3,4,5,4,3,2]
+    	# joke_data = np.array(joke_arr)
+    	# c=next(color)
+    	
+    	#pl.plot(np.arange(n_count_data), count_data, 'r--', np.arange(len(joke_data)), joke_data, 'b')
+    	#pl.plot(np.arange(n_count_data), [count_data, joke_data], color="#348ABD")
+    	# c=next(color)
+    	# pl.plot(np.arange(len(joke_data)), joke_data,c=c)
+    	
+    	pl.xlabel("Time")
+    	pl.ylabel("Fluoresence (SP)")
+    	pl.title("Goal Data")
+    	pl.xlim(0, n_count_data);
+    	#pl.savefig("Char_data.png")
+    	#########################################
+    	
+    	l_00 = pm.Uniform('l_00', 0., 0.5, value=0.)
+    	k_00 = pm.Uniform('k_00', 0., 0.5, value=0.)
+    	l_01 = pm.Uniform('l_01', 0., 0.5, value=0.)
+    	k_10 = pm.Uniform('k_10', 0., 0.5, value=0.)
+    	l_10 = pm.Uniform('l_10', 0., 0.5, value=0.)
+    	k_01 = pm.Uniform('k_01', 0., 0.5, value=0.)
+    	l_11 = pm.Uniform('l_11', 0., 10., value=0.)
+    	k_11 = pm.Uniform('k_11', 0., 10., value=0.)
+    	SI_0 = pm.Uninformative('SI_0', value=[10,1])
+
+    	simulated_trajectories = []
+    	
+    	# param_arr = []
+    	# for par in self.design_space[action].params:
+    	# 	param_arr.append(pm.Uniform(str(par), 0., 10., value=0.))
+    	# print "Param array = ", param_arr
+    	# #print "Random output:", l_00.random(), l_00.random(), k_00.random()
+    	# print "Random output:", param_arr[0].random(), param_arr[1].random()
+    	
+    	@pm.deterministic
+    	#def SI(SI_0=SI_0, l_00=l_00, k_00=k_00, l_01=l_01, k_10=k_10, l_10=l_10, k_01=k_01, l_11=l_11, k_11=k_11):
+    	def SI(SI_0=SI_0, l_11=l_11, k_11=k_11):
+    	# def SI(SI_0=SI_0, parslist=(0,0)):
+    		global sub_model
+    		init_species = [10,1]
+    		action = "['p0', 'g1', 'p1', 'g0']"
+    		t_out = np.arange(0,25,1)
+    		submat = {}
+    		# submat.update({"L00" : l_00})
+    		# submat.update({"K00" : k_00})
+    		# submat.update({"L01" : l_01})
+    		# submat.update({"K10" : k_10})
+    		# submat.update({"L10" : l_10})
+    		# submat.update({"K01" : k_01})
+    		submat.update({"L00" : 0})
+    		submat.update({"K00" : 0})
+    		submat.update({"L01" : 0})
+    		submat.update({"K10" : 0})
+    		submat.update({"L10" : 0})
+    		submat.update({"K01" : 0})
+    		submat.update({"L11" : l_11})
+    		submat.update({"K11" : k_11})
+    		# submat.update({"L00" : parslist[0]})
+    		# submat.update({"K00" : parslist[1]})
+    	
+    		sub_model = self.design_space[action].model.subs(submat)
+    		with stdout_redirected():
+    			sim_out = odeint(odeint_model,init_species,t_out)
+    			g0_res, g1_res = sim_out.T
+    		simulated_trajectories.append(g0_res)
+    		############
+    		#ok we should check the goal_dist here
+    		#if it's <= current epsilon then we need to save these param values 
+    		#and use them to readjust the priors we'll sample from in the future
+
+    		return sim_out.T
+
+    	# def getpars():
+    	# 	return 
+
+    	S = pm.Lambda('S', lambda SI=SI: SI[0])
+    	#simparams = pm.Lambda('simparams', lambda getpars=getpars: getpars)
+
+    	observation = pm.Poisson("obs", mu = S, value=count_data, observed=True)
+    	model = pm.Model([observation, l_11, k_11])
+    	#model = pm.Model([observation, l_00, k_00])
+    	#model = pm.Model([observation, param_arr[0], param_arr[1]])
+    	mcmc = pm.MCMC(model)
+    	# mcmc = pm.MCMC(set([observation, l_00, k_00, l_01, k_10, l_10, k_01, l_11, k_11]))
+    	# mcmc = pm.MCMC(set([observation, l_11, k_11]))
+
+    	###########
+    	#ok we'll need to reiterate over this 
+    	mcmc.sample(200, 100, 1)
+    	
+    	# l_00_samples = mcmc.trace('l_00')[:]
+    	# k_00_samples = mcmc.trace('k_00')[:]
+    	# l_01_samples = mcmc.trace('l_01')[:]
+    	# k_10_samples = mcmc.trace('k_10')[:]
+    	# l_10_samples = mcmc.trace('l_10')[:]
+    	# k_01_samples = mcmc.trace('k_01')[:]
+    	l_11_samples = mcmc.trace('l_11')[:]
+    	k_11_samples = mcmc.trace('k_11')[:]
+    	# print "\nL00 SAMPLES: ", l_00_samples
+    	# print "\nK00 SAMPLES: ", k_00_samples
+    	# print "\nL01 SAMPLES: ", l_01_samples
+    	# print "\nK10 SAMPLES: ", k_10_samples
+    	# print "\nL10 SAMPLES: ", l_10_samples
+    	# print "\nK01 SAMPLES: ", k_01_samples
+    	print "\nL11 SAMPLES: ", l_11_samples
+    	print "\nK11 SAMPLES: ", k_11_samples
+
+    	n = len(simulated_trajectories)
+    	color=iter(cm.rainbow(np.linspace(0,1,n)))
+    	for i in range(n):
+    		c = next(color)
+    		pl.plot(np.arange(n_count_data),simulated_trajectories[i], c=c)
+    	pl.plot(np.arange(n_count_data), count_data,'b--')
+    	pl.savefig("sim_traj.png")
+
+    	ax = pl.subplot(310)
+    	# P.hist(mcmc.trace('l_00')[:], normed= 1)
+    	# P.savefig('hist_l00')
+    	pl.hist(mcmc.trace('l_11')[:], normed= 1)
+    	pl.hist(mcmc.trace('k_11')[:], normed= 1)
+    	pl.savefig('hist_l11')
+
+    	############### Now let's update the current knowledge with these "learned params" #######
+    	####### Even though these aren't truly learned because they're from goal fitting not char fitting ####
+    	#### And then let's run goal dist and see if it gives us better results ####
+    	for par in self.design_space[action].params:
+    		if str(par) != "L11" and str(par)!="K11":
+    			self.param_space.update({par: [0, 0.5]})
+    	print "Param Space before optimizing: ", self.param_space
+    	self.goal_dist(action, 3)
+    	for par in self.design_space[action].params:
+    		if str(par) == "L11":
+    			self.param_space.update({par: [min(l_11_samples), max(l_11_samples)]})
+    		if str(par) == "K11":
+    			self.param_space.update({par: [min(k_11_samples), max(k_11_samples)]})
+    	print "Param Space after optimizing: ", self.param_space
+    	self.goal_dist(action, 3)
+
+
+    	
+    	return 0
+
     def search(self):
     	global sims_total
     	print "IN SEARCH - here's the mdp:", self.belugaMDP
@@ -1370,6 +1577,7 @@ class beluga_obj:
     	policy_dict = self.initPolicy() #... for each state in the full MDP state space, choose the simplest action
     	#print "Init policy is: ", policy_dict
     	alg_round = 1
+    	self.bayes_model_inf("['p0', 'g1', 'p1', 'g0']")
     	#while !cur_state.isTerminal(): ... while terminal state not experimentally reached:
     	while len(self.belugaMDP[cur_state_name].actions) > 0:
 	    	policy_dict = self.findPolicy(policy_dict, alg_round) #... find optimal policy
