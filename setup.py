@@ -3,7 +3,7 @@ Automated, experimentally-driven design of genetic circuits.
 """
 from setuptools import find_packages, setup
 
-dependencies = ['click']
+dependencies = ['click','emcee','corner','matplotlib','sympy','scipy','SALib','ipython','pymc']
 
 setup(
     name='beluga',

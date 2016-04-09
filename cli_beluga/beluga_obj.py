@@ -915,14 +915,14 @@ class beluga_obj:
     	problem.update({'names': names_arr})
     	problem.update({'bounds': bound_arr})
 
-    	Y = np.empty(num_sims)
+    	#Y = np.empty(num_sims)
 
     	#print "Problem Is: ", problem
 
     	param_values = saltelli.sample(problem, 10, calc_second_order=False)
     	#print "Param values = ", len(param_values), param_values
 
-    	Y = np.empty([param_values.shape[0]])
+    	#Y = np.empty([param_values.shape[0]])
     	#print "Y is now ", len(Y), Y
     	#print "working on submat ", problem['names'][0], param_values[0][0]
     	#num_sims = len(param_values)
@@ -963,7 +963,7 @@ class beluga_obj:
     		dist = distance.euclidean(np.array(g0_res), np.array(self.goal[2]))
 
     		#np.append(Y,dist)
-    		Y[i] = dist
+    		#Y[i] = dist
 
     		smooth_sim = savgol_filter(g0_res, 5, 3)
     		num_maxi = 0
@@ -989,7 +989,7 @@ class beluga_obj:
     	#print "Y size = ", Y.size
     	#print "num vars (D) = ", problem['num_vars']
     	#print "Y % (D+2) = ", Y.size % (problem['num_vars'] + 2)
-    	Si = sobol.analyze(problem, Y, calc_second_order=False, print_to_console=False)
+    	#Si = sobol.analyze(problem, Y, calc_second_order=False, print_to_console=False)
 
     	n = num_sims
     	color=iter(cm.rainbow(np.linspace(0,1,n)))
@@ -1383,22 +1383,24 @@ class beluga_obj:
 
     	return new_policy
 
-    def bayes_model_inf(self, action):
-    	for par in self.design_space[action].params:
-    		if str(par) != "L11" and str(par)!="K11":
-    			self.param_space.update({par: [0, 0.01]})
-    	#print "Param Space before optimizing: ", self.param_space
-    	# self.goal_dist(action, 3)
-    	for par in self.design_space[action].params:
-    		if str(par) == "L11":
-    			self.param_space.update({par: [8.0,10.0]})
-    			#self.param_space.update({par: [min(l_11_samples), max(l_11_samples)]})
-    		if str(par) == "K11":
-    			self.param_space.update({par: [7.0,10.0]})
-    			#self.param_space.update({par: [min(k_11_samples), max(k_11_samples)]})
-    	print "Param Space after optimizing: ", self.param_space
+    def bayes_model_inf(self, action, fit_data):
+    	# for par in self.design_space[action].params:
+    	# 	if str(par) != "L11" and str(par)!="K11":
+    	# 		self.param_space.update({par: [0, 0.01]})
+    	# #print "Param Space before optimizing: ", self.param_space
+    	# # self.goal_dist(action, 3)
+    	# for par in self.design_space[action].params:
+    	# 	if str(par) == "L11":
+    	# 		self.param_space.update({par: [8.0,10.0]})
+    	# 		#self.param_space.update({par: [min(l_11_samples), max(l_11_samples)]})
+    	# 	elif str(par) == "K11":
+    	# 		self.param_space.update({par: [7.0,10.0]})
+    	# 		#self.param_space.update({par: [min(k_11_samples), max(k_11_samples)]})
+    	# 	else :
+    	# 		self.param_space.update({par: [0.0 , 0.0001]})
+    	# print "Param Space after optimizing: ", self.param_space
 
-    	self.goal_dist(action, 6)
+    	# self.goal_dist(action, 6)
     	#####generating char data for p0g0#######
     	global sub_model
     	# init_species = [10,1]
@@ -1420,7 +1422,8 @@ class beluga_obj:
     	# c=next(color)
     	# plt.plot(x,y,c=c)
     	
-    	count_data = np.array(self.goal[2])
+    	#count_data = np.array(self.goal[2])
+    	count_data = np.array(fit_data)
     	print "submat is ", submat
     	# print "model is ", sub_model
     	print "Fitting to Data = ", count_data
@@ -1442,17 +1445,27 @@ class beluga_obj:
     	#pl.savefig("Char_data.png")
     	#########################################
     	
-    	l_00 = pm.Uniform('l_00', 0., 0.5, value=0.)
-    	k_00 = pm.Uniform('k_00', 0., 0.5, value=0.)
-    	l_01 = pm.Uniform('l_01', 0., 0.5, value=0.)
-    	k_10 = pm.Uniform('k_10', 0., 0.5, value=0.)
-    	l_10 = pm.Uniform('l_10', 0., 0.5, value=0.)
-    	k_01 = pm.Uniform('k_01', 0., 0.5, value=0.)
-    	l_11 = pm.Uniform('l_11', 0., 10., value=0.)
-    	k_11 = pm.Uniform('k_11', 0., 10., value=0.)
+    	parhash = {}
+    	for par in self.design_space[action].params:
+    		parhash.update({str(par) : pm.Uniform(str(par),self.param_space[par][0],self.param_space[par][1], 
+    			value=self.param_space[par][0])})
+
+    	print "parhash is ", parhash
+    	# l_00 = pm.Uniform('l_00', 0., 0.5, value=0.)
+    	# k_00 = pm.Uniform('k_00', 0., 0.5, value=0.)
+    	# l_01 = pm.Uniform('l_01', 0., 0.5, value=0.)
+    	# k_10 = pm.Uniform('k_10', 0., 0.5, value=0.)
+    	# l_10 = pm.Uniform('l_10', 0., 0.5, value=0.)
+    	# k_01 = pm.Uniform('k_01', 0., 0.5, value=0.)
+    	# l_11 = pm.Uniform('l_11', 0., 10., value=0.)
+    	# k_11 = pm.Uniform('k_11', 0., 10., value=0.)
     	SI_0 = pm.Uninformative('SI_0', value=[10,1])
 
     	simulated_trajectories = []
+
+    	# testhash = {}
+    	# testhash.update({'l_11':pm.Uniform('l_11', 8., 10., value=9.)})
+    	# testhash.update({'k_11':pm.Uniform('k_11', 7., 10., value=9.)})
     	
     	# param_arr = []
     	# for par in self.design_space[action].params:
@@ -1463,29 +1476,27 @@ class beluga_obj:
     	
     	@pm.deterministic
     	#def SI(SI_0=SI_0, l_00=l_00, k_00=k_00, l_01=l_01, k_10=k_10, l_10=l_10, k_01=k_01, l_11=l_11, k_11=k_11):
-    	def SI(SI_0=SI_0, l_11=l_11, k_11=k_11):
+    	#def SI(SI_0=SI_0, l_11=l_11, k_11=k_11):
+    	def SI(SI_0=SI_0, parhash = parhash):
     	# def SI(SI_0=SI_0, parslist=(0,0)):
     		global sub_model
     		init_species = [10,1]
-    		action = "['p0', 'g1', 'p1', 'g0']"
+    		#action = "['p0', 'g1', 'p1', 'g0']"
     		t_out = np.arange(0,25,1)
     		submat = {}
-    		# submat.update({"L00" : l_00})
-    		# submat.update({"K00" : k_00})
-    		# submat.update({"L01" : l_01})
-    		# submat.update({"K10" : k_10})
-    		# submat.update({"L10" : l_10})
-    		# submat.update({"K01" : k_01})
-    		submat.update({"L00" : 0})
-    		submat.update({"K00" : 0})
-    		submat.update({"L01" : 0})
-    		submat.update({"K10" : 0})
-    		submat.update({"L10" : 0})
-    		submat.update({"K01" : 0})
-    		submat.update({"L11" : l_11})
-    		submat.update({"K11" : k_11})
-    		# submat.update({"L00" : parslist[0]})
-    		# submat.update({"K00" : parslist[1]})
+    		# for key, elem in parhash.iteritems():
+    		# 	submat.update({str(key): key})
+    		for prm in self.design_space[action].params:
+    			submat.update({str(prm) : parhash[str(prm)]})
+    		# submat.update({"L00" : 0})
+    		# submat.update({"K00" : 0})
+    		# submat.update({"L01" : 0})
+    		# submat.update({"K10" : 0})
+    		# submat.update({"L10" : 0})
+    		# submat.update({"K01" : 0})
+    		# submat.update({"L11" : testhash['l_11']})
+    		# submat.update({"K11" : testhash['k_11']})
+    		print "submat in SI fcn : ", submat
     	
     		sub_model = self.design_space[action].model.subs(submat)
     		with stdout_redirected():
@@ -1506,10 +1517,14 @@ class beluga_obj:
     	#simparams = pm.Lambda('simparams', lambda getpars=getpars: getpars)
 
     	observation = pm.Poisson("obs", mu = S, value=count_data, observed=True)
-    	model = pm.Model([observation, l_11, k_11])
+    	parhash.update({'observation': observation})
+    	#model = pm.Model([observation, l_11, k_11])
     	#model = pm.Model([observation, l_00, k_00])
     	#model = pm.Model([observation, param_arr[0], param_arr[1]])
-    	mcmc = pm.MCMC(model)
+    	#testhash.update({'observation': observation})
+    	
+    	mcmc = pm.MCMC(parhash)
+    	#mcmc = pm.MCMC(model)
     	# mcmc = pm.MCMC(set([observation, l_00, k_00, l_01, k_10, l_10, k_01, l_11, k_11]))
     	# mcmc = pm.MCMC(set([observation, l_11, k_11]))
 
@@ -1523,16 +1538,18 @@ class beluga_obj:
     	# k_10_samples = mcmc.trace('k_10')[:]
     	# l_10_samples = mcmc.trace('l_10')[:]
     	# k_01_samples = mcmc.trace('k_01')[:]
-    	l_11_samples = mcmc.trace('l_11')[:]
-    	k_11_samples = mcmc.trace('k_11')[:]
+    	# l_11_samples = mcmc.trace('l_11')[:]
+    	# k_11_samples = mcmc.trace('k_11')[:]
     	# print "\nL00 SAMPLES: ", l_00_samples
     	# print "\nK00 SAMPLES: ", k_00_samples
     	# print "\nL01 SAMPLES: ", l_01_samples
     	# print "\nK10 SAMPLES: ", k_10_samples
     	# print "\nL10 SAMPLES: ", l_10_samples
     	# print "\nK01 SAMPLES: ", k_01_samples
-    	print "\nL11 SAMPLES: ", l_11_samples
-    	print "\nK11 SAMPLES: ", k_11_samples
+    	for pr in self.design_space[action].params:
+    		print "\n ", str(pr), " SAMPLES: ", mcmc.trace(str(pr))[:]
+    	# print "\nL11 SAMPLES: ", l_11_samples
+    	# print "\nK11 SAMPLES: ", k_11_samples
 
     	n = len(simulated_trajectories)
     	color=iter(cm.rainbow(np.linspace(0,1,n)))
@@ -1542,31 +1559,29 @@ class beluga_obj:
     	pl.plot(np.arange(n_count_data), count_data,'b--')
     	pl.savefig("sim_traj.png")
 
-    	ax = pl.subplot(310)
+    	#ax = pl.subplot(310)
     	# P.hist(mcmc.trace('l_00')[:], normed= 1)
     	# P.savefig('hist_l00')
-    	pl.hist(mcmc.trace('l_11')[:], normed= 1)
-    	pl.hist(mcmc.trace('k_11')[:], normed= 1)
-    	pl.savefig('hist_l11')
+    	# pl.hist(mcmc.trace('l_11')[:], normed= 1)
+    	# pl.hist(mcmc.trace('k_11')[:], normed= 1)
+    	#pl.savefig('hist_l11')
 
     	############### Now let's update the current knowledge with these "learned params" #######
     	####### Even though these aren't truly learned because they're from goal fitting not char fitting ####
     	#### And then let's run goal dist and see if it gives us better results ####
-    	for par in self.design_space[action].params:
-    		if str(par) != "L11" and str(par)!="K11":
-    			self.param_space.update({par: [0, 0.5]})
-    	print "Param Space before optimizing: ", self.param_space
-    	self.goal_dist(action, 3)
-    	for par in self.design_space[action].params:
-    		if str(par) == "L11":
-    			self.param_space.update({par: [min(l_11_samples), max(l_11_samples)]})
-    		if str(par) == "K11":
-    			self.param_space.update({par: [min(k_11_samples), max(k_11_samples)]})
-    	print "Param Space after optimizing: ", self.param_space
-    	self.goal_dist(action, 3)
+    	# for par in self.design_space[action].params:
+    	# 	if str(par) != "L11" and str(par)!="K11":
+    	# 		self.param_space.update({par: [0, 0.5]})
+    	# print "Param Space before optimizing: ", self.param_space
+    	# self.goal_dist(action, 3)
+    	# for par in self.design_space[action].params:
+    	# 	if str(par) == "L11":
+    	# 		self.param_space.update({par: [min(l_11_samples), max(l_11_samples)]})
+    	# 	if str(par) == "K11":
+    	# 		self.param_space.update({par: [min(k_11_samples), max(k_11_samples)]})
+    	# print "Param Spacezzzzzzz after optimizing: ", self.param_space
+    	# self.goal_dist(action, 3)
 
-
-    	
     	return 0
 
     def search(self):
@@ -1577,7 +1592,7 @@ class beluga_obj:
     	policy_dict = self.initPolicy() #... for each state in the full MDP state space, choose the simplest action
     	#print "Init policy is: ", policy_dict
     	alg_round = 1
-    	self.bayes_model_inf("['p0', 'g1', 'p1', 'g0']")
+    	self.bayes_model_inf("['p0', 'g0']", self.goal[2])
     	#while !cur_state.isTerminal(): ... while terminal state not experimentally reached:
     	while len(self.belugaMDP[cur_state_name].actions) > 0:
 	    	policy_dict = self.findPolicy(policy_dict, alg_round) #... find optimal policy
