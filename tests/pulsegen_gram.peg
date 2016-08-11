@@ -1,0 +1,6 @@
+PromoterGeneGrammar:
+  Design	<- Prom Rep0 Cassette
+  Cassette	<- '' | Prom TF Cassette
+  Rep0	<- f0
+  Prom	<- p0 | p1 | p2
+  TF  <- g0 | g1

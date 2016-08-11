@@ -32,7 +32,7 @@ all_colors = 'black', 'red', 'green', 'yellow', 'blue', 'magenta', \
 def main(grammar, config):
     """Automated, experimentally-driven design of genetic circuits."""
     greet = 'Hello'
-    click.echo(click.style('{0}, {1}.'.format(greet, 'beluga user!'), fg='blue', blink=True))
+    click.echo(click.style('{0}, {1}.'.format(greet, 'beluga userzzzzz!'), fg='blue', blink=True))
     rd_grammar = grammar.read()
     rd_config = config.read()
     click.echo(rd_grammar)
@@ -47,42 +47,24 @@ def main(grammar, config):
     
 
     #set of non terminals
-    N = ('<subject>', '<predicate>', '<noun phrase>', '<noun>', '<article>', '<verb>',   '<direct object>')
+    #N = ('<subject>', '<predicate>', '<noun phrase>', '<noun>', '<article>', '<verb>',   '<direct object>')
     #set of teminals
-
-    T = ('the', 'boy', 'dog', 'bit')
-    T = ('p0','p1','p2','g0','g1','g2')
+    T = ('p0','p1','p2','p3','g0','g1','g2','g3')
+    InOut = ('g0','g1','g2','g3')
     #productions
-    P = [ ('Sigma',           ['<subject>', '<predicate>']), \
-    ('<subject>',       ['<noun phrase>']),            \
-    ('<predicate>',     ['<verb>']),                   \
-    ('<predicate>',     ['<verb>','<direct object>']), \
-    ('<noun phrase>',   ['<article>','<noun>']),       \
-    ('<direct object>', ['<noun phrase>']),            \
-    ('<noun>',          ['boy']),                      \
-    ('<noun>',          ['dog']),                      \
-    ('<article>',       ['the']),                      \
-    ('<verb>',          ['bit'])                       ]
-
-    # P = [ ('Design',           ['R']),                  \
-    # ('Design',          ['C','R']),                      \
-    # ('Design',          ['C','C','R']),                  \
-    # ('C',               ['Prom', 'Gene']),              \
-    # ('R',               ['Prom', 'g0']),                \
-    # ('Prom',            ['p0']),                        \
-    # ('Prom',            ['p1']),                        \
-    # ('Prom',            ['p2']),                        \
-    # ('Gene',            ['g1']),                        \
-    # ('Gene',            ['g2'])                         ]
-
 
     P = [ ('Design',           ['R']),                  \
-    ('Design',          ['C','R']),                      \
+    ('Design',          ['C','R']),                     \
+    ('Design',          ['C','C','R']),                 \
     ('C',               ['Prom', 'Gene']),              \
     ('R',               ['Prom', 'g0']),                \
     ('Prom',            ['p0']),                        \
     ('Prom',            ['p1']),                        \
-    ('Gene',            ['g1'])                         ]
+    ('Prom',            ['p2']),                        \
+    ('Prom',            ['p3']),                        \
+    ('Gene',            ['g1']),                        \
+    ('Gene',            ['g2']),                        \
+    ('Gene',            ['g3'])                         ]
 
 
 

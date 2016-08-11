@@ -1,0 +1,153 @@
+INFO:root:Welcome to BELUGA!
+INFO:root:PromoterGeneGrammar:
+  Design	<- Prom Rep0 Cassette
+  Cassette	<- '' | Prom TF Cassette
+  Rep0	<- f0
+  Prom	<- p0 | p1 | p2
+  TF  <- g0 | g1
+
+INFO:root:"design_objective":{  
+	"output":{  
+		"time_series":{  
+			"gene":"0",
+			"data":"0,0,1,2,1,1,0,0",
+			"time":"0,1,2,3,4,5,6,7"
+		}
+	},
+	"num_cassettes":"3"
+}
+
+INFO:root:Number of Designs:
+INFO:root:6
+INFO:root:Design Space:
+INFO:root:{"['p1', 'g1', 'p0', 'g0']": <cli_beluga.beluga_obj.design instance at 0x117e23908>, "['p1', 'g0']": <cli_beluga.beluga_obj.design instance at 0x117e23830>, "['p0', 'g0']": <cli_beluga.beluga_obj.design instance at 0x117e237e8>, "['p1', 'g1', 'p1', 'g0']": <cli_beluga.beluga_obj.design instance at 0x117e23950>, "['p0', 'g1', 'p1', 'g0']": <cli_beluga.beluga_obj.design instance at 0x117e238c0>, "['p0', 'g1', 'p0', 'g0']": <cli_beluga.beluga_obj.design instance at 0x117e23878>}
+INFO:root:Welcome to BELUGA!
+INFO:root:PromoterGeneGrammar:
+  Design	<- Prom Rep0 Cassette
+  Cassette	<- '' | Prom TF Cassette
+  Rep0	<- f0
+  Prom	<- p0 | p1 | p2
+  TF  <- g0 | g1
+
+INFO:root:"design_objective":{  
+	"output":{  
+		"time_series":{  
+			"gene":"0",
+			"data":"0,0,1,2,1,1,0,0",
+			"time":"0,1,2,3,4,5,6,7"
+		}
+	},
+	"num_cassettes":"3"
+}
+
+INFO:root:Number of Designs:
+INFO:root:6
+INFO:root:Design Space:
+INFO:root:{"['p1', 'g1', 'p0', 'g0']": <cli_beluga.beluga_obj.design instance at 0x10d017908>, "['p1', 'g0']": <cli_beluga.beluga_obj.design instance at 0x10d017830>, "['p0', 'g0']": <cli_beluga.beluga_obj.design instance at 0x10d0177e8>, "['p1', 'g1', 'p1', 'g0']": <cli_beluga.beluga_obj.design instance at 0x10d017950>, "['p0', 'g1', 'p1', 'g0']": <cli_beluga.beluga_obj.design instance at 0x10d0178c0>, "['p0', 'g1', 'p0', 'g0']": <cli_beluga.beluga_obj.design instance at 0x10d017878>}
+INFO:root:Welcome to BELUGA!
+INFO:root:PromoterGeneGrammar:
+  Design	<- Prom Rep0 Cassette
+  Cassette	<- '' | Prom TF Cassette
+  Rep0	<- f0
+  Prom	<- p0 | p1 | p2
+  TF  <- g0 | g1
+
+INFO:root:"design_objective":{  
+	"output":{  
+		"time_series":{  
+			"gene":"0",
+			"data":"0,0,1,2,1,1,0,0",
+			"time":"0,1,2,3,4,5,6,7"
+		}
+	},
+	"num_cassettes":"3"
+}
+
+INFO:root:Number of Designs:
+INFO:root:6
+INFO:root:Design Space:
+INFO:root:{"['p1', 'g1', 'p0', 'g0']": <cli_beluga.beluga_obj.design instance at 0x112a1c908>, "['p1', 'g0']": <cli_beluga.beluga_obj.design instance at 0x112a1c830>, "['p0', 'g0']": <cli_beluga.beluga_obj.design instance at 0x112a1c7e8>, "['p1', 'g1', 'p1', 'g0']": <cli_beluga.beluga_obj.design instance at 0x112a1c950>, "['p0', 'g1', 'p1', 'g0']": <cli_beluga.beluga_obj.design instance at 0x112a1c8c0>, "['p0', 'g1', 'p0', 'g0']": <cli_beluga.beluga_obj.design instance at 0x112a1c878>}
+INFO:root:Welcome to BELUGA!
+INFO:root:PromoterGeneGrammar:
+  Design	<- Prom Rep0 Cassette
+  Cassette	<- '' | Prom TF Cassette
+  Rep0	<- f0
+  Prom	<- p0 | p1 | p2
+  TF  <- g0 | g1
+
+INFO:root:"design_objective":{  
+	"output":{  
+		"time_series":{  
+			"gene":"0",
+			"data":"0,0,1,2,1,1,0,0",
+			"time":"0,1,2,3,4,5,6,7"
+		}
+	},
+	"num_cassettes":"3"
+}
+
+INFO:root:Number of Designs:
+INFO:root:52
+INFO:root:Welcome to BELUGA!
+INFO:root:PromoterGeneGrammar:
+  Design	<- Prom Rep0 Cassette
+  Cassette	<- '' | Prom TF Cassette
+  Rep0	<- f0
+  Prom	<- p0 | p1 | p2
+  TF  <- g0 | g1
+
+INFO:root:"design_objective":{  
+	"output":{  
+		"time_series":{  
+			"gene":"0",
+			"data":"0,0,1,2,1,1,0,0",
+			"time":"0,1,2,3,4,5,6,7"
+		}
+	},
+	"num_cassettes":"3"
+}
+
+INFO:root:Number of Designs:
+INFO:root:52
+INFO:root:Welcome to BELUGA!
+INFO:root:PromoterGeneGrammar:
+  Design	<- Prom Rep0 Cassette
+  Cassette	<- '' | Prom TF Cassette
+  Rep0	<- f0
+  Prom	<- p0 | p1 | p2
+  TF  <- g0 | g1
+
+INFO:root:"design_objective":{  
+	"output":{  
+		"time_series":{  
+			"gene":"0",
+			"data":"0,0,1,2,1,1,0,0",
+			"time":"0,1,2,3,4,5,6,7"
+		}
+	},
+	"num_cassettes":"3"
+}
+
+INFO:root:Number of Designs:
+INFO:root:628
+INFO:root:Welcome to BELUGA!
+INFO:root:PromoterGeneGrammar:
+  Design	<- Prom Rep0 Cassette
+  Cassette	<- '' | Prom TF Cassette
+  Rep0	<- f0
+  Prom	<- p0 | p1 | p2
+  TF  <- g0 | g1
+
+INFO:root:"design_objective":{  
+	"output":{  
+		"time_series":{  
+			"gene":"0",
+			"data":"0,0,1,2,1,1,0,0",
+			"time":"0,1,2,3,4,5,6,7"
+		}
+	},
+	"num_cassettes":"3"
+}
+
+INFO:root:Number of Designs:
+INFO:root:628
